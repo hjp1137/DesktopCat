@@ -5,30 +5,22 @@
 ## 开发阶段记录
 
 ### T01：基础工程与移动验证
-- 建立了基础工程与目录结构；
-- 实现了无外部美术资源依赖的临时猫咪绘制；
-- 实现了小猫基于 delta 的左右自动往返巡逻移动与边界转向逻辑。
+- 建立了基础工程与目录结构，实现临时猫咪绘制与左右巡逻碰边转向。
 
 ### T02：透明桌面 Overlay
-- 启用了逐像素透明（Per-pixel Transparency）与视口透明背景，实现真实桌面透显；
-- 启用了无边框（Borderless）与窗口置顶（Always On Top）；
-- 实现了全屏 Overlay 动态分辨率与坐标适配（支持多显示器并可通过 `TAB` 键自由切换）；
-- 小猫移动范围自动适配全屏显示区域并在屏幕边界反弹转向；
-- 提供了 ESC 键与 Alt+F4 安全退出机制。
+- 启用了逐像素透明与视口透明背景，实现真实桌面透显、无边框、窗口置顶与多显示器适配。
 
 ### T03：Mouse Passthrough + Cat 点击互动
-- 实现了窗口级鼠标穿透（Mouse Passthrough）：除小猫包围盒区域外，其余透明区域鼠标完全穿透至 Windows 桌面及下方所有应用；
-- 鼠标可交互区域（Passthrough Polygon）实时跟随小猫移动动态更新；
-- 实现了小猫点击交互检测：点击小猫时在控制台输出 `Cat clicked!` 并触发轻量向上弹跳视觉反馈；
-- 点击互动不中断小猫原有的自主左右巡逻与碰边反弹逻辑。
+- 实现了窗口级鼠标穿透，仅小猫包围盒响应输入，其余区域穿透桌面；实现小猫点击轻微弹跳反馈。
 
 ### T04：AnimatedSprite2D + Idle / Walk 动画框架
-- 将 Cat 独立为正式场景 `scenes/cat.tscn`，使用 `AnimatedSprite2D` 驱动角色表现层；
-- 建立了原创临时动画素材（`idle` 4 帧 @ 4 FPS，`walk` 6 帧 @ 10 FPS）；
-- 实现了基础走走停停状态机（WALK 行走 3~7 秒 ↔ IDLE 停歇 1.5~3.5 秒）；
-- 行走时通过 `AnimatedSprite2D.flip_h` 精准翻转左右朝向；
-- 保持点击弹跳、鼠标穿透、多显示器切换与单文件独立 EXE 构建；
-- 说明：当前仍使用临时原创动画素材，后续会替换正式 Cat 美术资产。
+- 将 Cat 独立为 `scenes/cat.tscn`，使用 `AnimatedSprite2D` 驱动角色表现层，实现基础走走停停与 `flip_h` 翻转。
+
+### T05：行为状态机 + 统一 Command 系统
+- 建立了独立的 `CommandManager` 控制中枢，定义了统一标准指令（`STOP`、`WALK_LEFT`、`WALK_RIGHT`、`RESUME_AUTO`）；
+- 重构了小猫行为状态机（`enter_state`、`update_state`、`exit_state`、`change_state`）；
+- 实现了 `AUTO`（自主走走停停）与 `COMMAND`（服从外部指令）两种控制模式，外部命令可即时打断自主行为；
+- 架构原则：DesktopCat 的外部控制统一通过 `CommandManager`，未来 Mouse、Voice、Gesture、AI 均作为 Input Controller 接入 `CommandManager`，不得直接操作 Cat 内部状态。
 
 ## 运行方式
 
@@ -40,4 +32,10 @@
 ```bash
 "E:\Program Files\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe" --path "D:\projects\godot\DesktopCat"
 ```
-- **快捷键**：`TAB` 切换多显示器，`ESC` / `Alt + F4` 安全退出。
+- **快捷键**：
+  - `1`：发送 STOP 指令
+  - `2`：发送 WALK_LEFT 指令
+  - `3`：发送 WALK_RIGHT 指令
+  - `4`：发送 RESUME_AUTO 恢复自主模式
+  - `TAB`：切换多显示器
+  - `ESC` / `Alt + F4`：安全退出

@@ -1,10 +1,16 @@
 extends Node2D
 
 @onready var cat: Node2D = $Cat
+var command_manager: CommandManager = null
 var current_target_screen: int = 0
 
 func _ready() -> void:
 	print("[Main] DesktopCat 启动中...")
+	command_manager = CommandManager.new()
+	add_child(command_manager)
+	if is_instance_valid(cat):
+		command_manager.register_cat(cat)
+	
 	if DisplayServer.get_name() != "headless":
 		current_target_screen = get_window().current_screen
 		if current_target_screen < 0:
@@ -13,7 +19,6 @@ func _ready() -> void:
 
 func _setup_transparent_overlay() -> void:
 	RenderingServer.set_default_clear_color(Color(0, 0, 0, 0))
-	
 	get_viewport().transparent_bg = true
 	get_tree().root.transparent_bg = true
 	get_tree().root.transparent = true
@@ -28,7 +33,6 @@ func _setup_transparent_overlay() -> void:
 		DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_TRANSPARENT, true, window_id)
 		DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_BORDERLESS, true, window_id)
 		DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_ALWAYS_ON_TOP, true, window_id)
-		
 		_apply_screen_layout(current_target_screen)
 	
 	print("[Main] 透明桌面 Overlay 初始化完成。")
@@ -48,7 +52,6 @@ func _apply_screen_layout(screen_idx: int) -> void:
 		screen_size = DisplayServer.screen_get_size(screen_idx) - Vector2i(0, 1)
 	
 	print("[Main] 切换/应用屏幕 ID: %d, 位置=%s, 尺寸=%s" % [screen_idx, screen_pos, screen_size])
-	
 	window.position = screen_pos
 	window.size = screen_size
 	
@@ -76,3 +79,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_TAB:
 			var next_screen = (current_target_screen + 1) % DisplayServer.get_screen_count()
 			_apply_screen_layout(next_screen)
+		elif event.keycode == KEY_1:
+			command_manager.send_command(CommandManager.CatCommand.STOP)
+		elif event.keycode == KEY_2:
+			command_manager.send_command(CommandManager.CatCommand.WALK_LEFT)
+		elif event.keycode == KEY_3:
+			command_manager.send_command(CommandManager.CatCommand.WALK_RIGHT)
+		elif event.keycode == KEY_4:
+			command_manager.send_command(CommandManager.CatCommand.RESUME_AUTO)
