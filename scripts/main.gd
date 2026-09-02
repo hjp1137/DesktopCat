@@ -55,8 +55,8 @@ func _apply_screen_layout(screen_idx: int) -> void:
 	window.position = screen_pos
 	window.size = screen_size
 	
-	if is_instance_valid(cat):
-		cat.position = Vector2(screen_size.x / 2.0, screen_size.y / 2.0)
+	if is_instance_valid(cat) and cat.has_method("reset_to_ground"):
+		cat.reset_to_ground(Vector2(screen_size.x / 2.0, screen_size.y - 48.0))
 		update_mouse_passthrough(cat.position)
 
 func update_mouse_passthrough(cat_pos: Vector2) -> void:
@@ -87,3 +87,5 @@ func _unhandled_input(event: InputEvent) -> void:
 			command_manager.send_command(CommandManager.CatCommand.WALK_RIGHT)
 		elif event.keycode == KEY_4:
 			command_manager.send_command(CommandManager.CatCommand.RESUME_AUTO)
+		elif event.keycode == KEY_5:
+			command_manager.send_command(CommandManager.CatCommand.JUMP)

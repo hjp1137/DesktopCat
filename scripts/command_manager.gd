@@ -5,7 +5,8 @@ enum CatCommand {
 	STOP,
 	WALK_LEFT,
 	WALK_RIGHT,
-	RESUME_AUTO
+	RESUME_AUTO,
+	JUMP
 }
 
 signal command_dispatched(cmd: CatCommand, payload: Dictionary)

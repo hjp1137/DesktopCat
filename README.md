@@ -17,10 +17,16 @@
 - 将 Cat 独立为 `scenes/cat.tscn`，使用 `AnimatedSprite2D` 驱动角色表现层，实现基础走走停停与 `flip_h` 翻转。
 
 ### T05：行为状态机 + 统一 Command 系统
-- 建立了独立的 `CommandManager` 控制中枢，定义了统一标准指令（`STOP`、`WALK_LEFT`、`WALK_RIGHT`、`RESUME_AUTO`）；
-- 重构了小猫行为状态机（`enter_state`、`update_state`、`exit_state`、`change_state`）；
-- 实现了 `AUTO`（自主走走停停）与 `COMMAND`（服从外部指令）两种控制模式，外部命令可即时打断自主行为；
-- 架构原则：DesktopCat 的外部控制统一通过 `CommandManager`，未来 Mouse、Voice、Gesture、AI 均作为 Input Controller 接入 `CommandManager`，不得直接操作 Cat 内部状态。
+- 建立了独立的 `CommandManager` 控制中枢，定义了统一标准指令；
+- 实现了 `AUTO`（自主走停）与 `COMMAND`（指令控制）双模式，支持即时打断与恢复。
+
+### T06：Jump + Gravity + Falling
+- 为 Cat 建立了完整的垂直运动系统（JUMP → FALL → LAND），支持重力与下落物理；
+- 扩展 `CatState`：`IDLE`、`WALK`、`JUMP`、`FALL`；
+- 扩展 `CatCommand`：`STOP`、`WALK_LEFT`、`WALK_RIGHT`、`RESUME_AUTO`、`JUMP`；
+- 动态计算 `ground_y`，落地位置稳定且自动恢复原模式地面行为；
+- 保持空中水平位移与防二段跳；
+- 架构分离：Jump 是改变小猫根节点世界坐标的真实物理运动，点击 Cat 的 16px 微跳属于 Visual Feedback，两套机制彼此独立。
 
 ## 运行方式
 
@@ -37,5 +43,6 @@
   - `2`：发送 WALK_LEFT 指令
   - `3`：发送 WALK_RIGHT 指令
   - `4`：发送 RESUME_AUTO 恢复自主模式
+  - `5`：发送 JUMP 指令（小猫起跳）
   - `TAB`：切换多显示器
   - `ESC` / `Alt + F4`：安全退出
