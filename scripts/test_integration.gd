@@ -5,7 +5,7 @@ var main_scene: Node = null
 var clicked_tested: bool = false
 
 func _init() -> void:
-	print("========== 开始执行 T03 主场景与点击集成测试 ==========")
+	print("========== 开始执行 T04 主场景与动画集成测试 ==========")
 	var scene_res = load("res://scenes/main.tscn")
 	if not scene_res:
 		printerr("无法加载主场景 res://scenes/main.tscn")
@@ -28,8 +28,8 @@ func _process(delta: float) -> bool:
 		ev.position = cat.position
 		cat._unhandled_input(ev)
 	
-	# 运行 1.5 秒后模拟发送 ESC 键以验证退出机制
-	if elapsed_time > 1.5:
+	# 运行 1.8 秒后模拟发送 ESC 键以验证退出机制
+	if elapsed_time > 1.8:
 		print("========== 模拟触发 ESC 按键事件 ==========")
 		var ev_esc := InputEventKey.new()
 		ev_esc.keycode = KEY_ESCAPE

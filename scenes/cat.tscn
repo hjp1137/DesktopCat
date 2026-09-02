@@ -1,0 +1,72 @@
+[gd_scene load_steps=15 format=3]
+
+[ext_resource type="Script" path="res://scripts/cat.gd" id="1_cat_script"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/idle_01.png" id="2_idle01"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/idle_02.png" id="3_idle02"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/idle_03.png" id="4_idle03"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/idle_04.png" id="5_idle04"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/walk_01.png" id="6_walk01"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/walk_02.png" id="7_walk02"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/walk_03.png" id="8_walk03"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/walk_04.png" id="9_walk04"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/walk_05.png" id="10_walk05"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/walk_06.png" id="11_walk06"]
+
+[sub_resource type="SpriteFrames" id="SpriteFrames_cat"]
+animations = [{
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("2_idle01")
+}, {
+"duration": 1.0,
+"texture": ExtResource("3_idle02")
+}, {
+"duration": 1.0,
+"texture": ExtResource("4_idle03")
+}, {
+"duration": 1.0,
+"texture": ExtResource("5_idle04")
+}],
+"loop": true,
+"name": &"idle",
+"speed": 4.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("6_walk01")
+}, {
+"duration": 1.0,
+"texture": ExtResource("7_walk02")
+}, {
+"duration": 1.0,
+"texture": ExtResource("8_walk03")
+}, {
+"duration": 1.0,
+"texture": ExtResource("9_walk04")
+}, {
+"duration": 1.0,
+"texture": ExtResource("10_walk05")
+}, {
+"duration": 1.0,
+"texture": ExtResource("11_walk06")
+}],
+"loop": true,
+"name": &"walk",
+"speed": 10.0
+}]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_cat"]
+size = Vector2(56, 56)
+
+[node name="Cat" type="Node2D"]
+script = ExtResource("1_cat_script")
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
+sprite_frames = SubResource("SpriteFrames_cat")
+animation = &"idle"
+autoplay = "idle"
+
+[node name="Area2D" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
+shape = SubResource("RectangleShape2D_cat")
