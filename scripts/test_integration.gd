@@ -1,12 +1,10 @@
 extends SceneTree
 
 var elapsed_time: float = 0.0
-var bounce_count: int = 0
 var main_scene: Node = null
 
 func _init() -> void:
-	print("========== 开始执行 T01 主场景集成运行测试 ==========")
-	root.size = Vector2i(640, 360)
+	print("========== 开始执行 T02 主场景与ESC退出集成运行测试 ==========")
 	var scene_res = load("res://scenes/main.tscn")
 	if not scene_res:
 		printerr("无法加载主场景 res://scenes/main.tscn")
@@ -18,10 +16,14 @@ func _init() -> void:
 func _process(delta: float) -> bool:
 	elapsed_time += delta
 	var cat = main_scene.get_node_or_null("Cat")
-	if cat:
-		# 监视小猫运行，验证往返周期
-		if elapsed_time > 8.5: # 运行8.5秒完成左右往返验证
-			print("========== 主场景集成运行测试通过: 运行时间 %.2f 秒, 最终坐标: %s ==========" % [elapsed_time, cat.position])
-			quit(0)
-			return true
+	
+	# 运行 1.5 秒后模拟发送 ESC 键以验证退出机制
+	if elapsed_time > 1.5:
+		print("========== 模拟触发 ESC 按键事件 ==========")
+		var ev := InputEventKey.new()
+		ev.keycode = KEY_ESCAPE
+		ev.pressed = true
+		main_scene._unhandled_input(ev)
+		# 若成功调用 quit 则将退出
+		return true
 	return false

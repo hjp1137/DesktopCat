@@ -16,3 +16,11 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 window/size/viewport_width=640
 window/size/viewport_height=360
 window/size/resizable=true
+window/size/borderless=true
+window/size/always_on_top=true
+window/size/transparent=true
+window/per_pixel_transparency/allowed=true
+
+[rendering]
+
+viewport/transparent_background=true
