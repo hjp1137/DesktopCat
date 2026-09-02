@@ -54,6 +54,19 @@ func _apply_screen_layout(screen_idx: int) -> void:
 	
 	if is_instance_valid(cat):
 		cat.position = Vector2(screen_size.x / 2.0, screen_size.y / 2.0)
+		update_mouse_passthrough(cat.position)
+
+func update_mouse_passthrough(cat_pos: Vector2) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var half_w: float = 32.0
+	var top_h: float = 36.0
+	var bottom_h: float = 28.0
+	var p1 := cat_pos + Vector2(-half_w, -top_h)
+	var p2 := cat_pos + Vector2(half_w, -top_h)
+	var p3 := cat_pos + Vector2(half_w, bottom_h)
+	var p4 := cat_pos + Vector2(-half_w, bottom_h)
+	DisplayServer.window_set_mouse_passthrough(PackedVector2Array([p1, p2, p3, p4]))
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -61,6 +74,5 @@ func _unhandled_input(event: InputEvent) -> void:
 			print("[Main] 接收到 ESC 键，触发安全退出。")
 			get_tree().quit()
 		elif event.keycode == KEY_TAB:
-			# 按 TAB 在多显示器之间循环切换
 			var next_screen = (current_target_screen + 1) % DisplayServer.get_screen_count()
 			_apply_screen_layout(next_screen)
