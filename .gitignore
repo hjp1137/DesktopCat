@@ -4,6 +4,7 @@
 
 # 导出与临时文件
 export_presets.cfg
+build/
 *.tmp
 *.log
 

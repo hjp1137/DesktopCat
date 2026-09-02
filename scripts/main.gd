@@ -1,6 +1,6 @@
 extends Node2D
 
-@onready var cat: Cat = $Cat
+@onready var cat: Node2D = $Cat
 
 func _ready() -> void:
 	print("[Main] DesktopCat 启动中...")
