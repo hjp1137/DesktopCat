@@ -2,6 +2,7 @@ extends Node2D
 
 @onready var cat: Node2D = $Cat
 var command_manager: CommandManager = null
+var mouse_controller: MouseController = null
 var current_target_screen: int = 0
 
 func _ready() -> void:
@@ -10,6 +11,12 @@ func _ready() -> void:
 	add_child(command_manager)
 	if is_instance_valid(cat):
 		command_manager.register_cat(cat)
+	
+	mouse_controller = MouseController.new()
+	mouse_controller.command_manager = command_manager
+	mouse_controller.cat = cat
+	mouse_controller.main_node = self
+	add_child(mouse_controller)
 	
 	if DisplayServer.get_name() != "headless":
 		current_target_screen = get_window().current_screen
@@ -38,6 +45,8 @@ func _setup_transparent_overlay() -> void:
 	print("[Main] 透明桌面 Overlay 初始化完成。")
 
 func _apply_screen_layout(screen_idx: int) -> void:
+	if mouse_controller:
+		mouse_controller.cancel_drag()
 	var window := get_window()
 	var total_screens := DisplayServer.get_screen_count()
 	screen_idx = clampi(screen_idx, 0, total_screens - 1)
@@ -61,6 +70,8 @@ func _apply_screen_layout(screen_idx: int) -> void:
 
 func update_mouse_passthrough(cat_pos: Vector2) -> void:
 	if DisplayServer.get_name() == "headless":
+		return
+	if mouse_controller and mouse_controller.is_dragging:
 		return
 	var half_w: float = 32.0
 	var top_h: float = 36.0

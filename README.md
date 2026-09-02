@@ -22,11 +22,17 @@
 
 ### T06：Jump + Gravity + Falling
 - 为 Cat 建立了完整的垂直运动系统（JUMP → FALL → LAND），支持重力与下落物理；
-- 扩展 `CatState`：`IDLE`、`WALK`、`JUMP`、`FALL`；
-- 扩展 `CatCommand`：`STOP`、`WALK_LEFT`、`WALK_RIGHT`、`RESUME_AUTO`、`JUMP`；
-- 动态计算 `ground_y`，落地位置稳定且自动恢复原模式地面行为；
-- 保持空中水平位移与防二段跳；
-- 架构分离：Jump 是改变小猫根节点世界坐标的真实物理运动，点击 Cat 的 16px 微跳属于 Visual Feedback，两套机制彼此独立。
+- 扩展 `CatState`（`IDLE`, `WALK`, `JUMP`, `FALL`）与 `CatCommand`（`JUMP`）。
+
+### T07：Mouse Drag + Throw
+- 新建 `MouseController`，统一接入 `CommandManager` 控制小猫；
+- 新增 `CatCommand`：`DRAG_START`、`DRAG_MOVE`、`DRAG_END`；
+- 新增 `CatState`：`DRAG`；
+- Click 与 Drag 判定：通过 8 像素移动阈值精确区分单击与拖拽，单击保留 16px 视觉微跳，按住拖拽保持相对抓取偏移（`drag_offset`）；
+- 抛掷（Throw）速度估算：基于最近 120ms 样本平滑计算释放速度，并对极速做安全钳制（X: 1200 px/s, Y: 1000 px/s）；
+- 抛出后完全复用 T06 重力、抛物线与着陆逻辑，落地后无缝恢复原意图行为；
+- 拖拽期间全屏接收鼠标事件并在松开后立即恢复穿透，具备物理释放 Fail-safe 保护；
+- 拖拽期间外部 Command 冲突策略：采用忽略保护，防止拖拽过程中小猫被瞬移或打断。
 
 ## 运行方式
 
@@ -43,6 +49,6 @@
   - `2`：发送 WALK_LEFT 指令
   - `3`：发送 WALK_RIGHT 指令
   - `4`：发送 RESUME_AUTO 恢复自主模式
-  - `5`：发送 JUMP 指令（小猫起跳）
+  - `5`：发送 JUMP 指令
   - `TAB`：切换多显示器
   - `ESC` / `Alt + F4`：安全退出
