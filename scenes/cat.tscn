@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3]
+[gd_scene load_steps=27 format=3]
 
 [ext_resource type="Script" path="res://scripts/cat.gd" id="1_cat_script"]
 [ext_resource type="Texture2D" path="res://assets/cat/placeholder/idle_01.png" id="2_idle01"]
@@ -11,48 +11,45 @@
 [ext_resource type="Texture2D" path="res://assets/cat/placeholder/walk_04.png" id="9_walk04"]
 [ext_resource type="Texture2D" path="res://assets/cat/placeholder/walk_05.png" id="10_walk05"]
 [ext_resource type="Texture2D" path="res://assets/cat/placeholder/walk_06.png" id="11_walk06"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/run_01.png" id="12_run01"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/run_02.png" id="13_run02"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/run_03.png" id="14_run03"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/run_04.png" id="15_run04"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/run_05.png" id="16_run05"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/run_06.png" id="17_run06"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/sit_01.png" id="18_sit01"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/sit_02.png" id="19_sit02"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/sleep_01.png" id="20_slp01"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/sleep_02.png" id="21_slp02"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/sleep_03.png" id="22_slp03"]
+[ext_resource type="Texture2D" path="res://assets/cat/placeholder/sleep_04.png" id="23_slp04"]
 
 [sub_resource type="SpriteFrames" id="SpriteFrames_cat"]
 animations = [{
-"frames": [{
-"duration": 1.0,
-"texture": ExtResource("2_idle01")
-}, {
-"duration": 1.0,
-"texture": ExtResource("3_idle02")
-}, {
-"duration": 1.0,
-"texture": ExtResource("4_idle03")
-}, {
-"duration": 1.0,
-"texture": ExtResource("5_idle04")
-}],
+"frames": [{ "duration": 1.0, "texture": ExtResource("2_idle01") }, { "duration": 1.0, "texture": ExtResource("3_idle02") }, { "duration": 1.0, "texture": ExtResource("4_idle03") }, { "duration": 1.0, "texture": ExtResource("5_idle04") }],
 "loop": true,
 "name": &"idle",
 "speed": 4.0
 }, {
-"frames": [{
-"duration": 1.0,
-"texture": ExtResource("6_walk01")
-}, {
-"duration": 1.0,
-"texture": ExtResource("7_walk02")
-}, {
-"duration": 1.0,
-"texture": ExtResource("8_walk03")
-}, {
-"duration": 1.0,
-"texture": ExtResource("9_walk04")
-}, {
-"duration": 1.0,
-"texture": ExtResource("10_walk05")
-}, {
-"duration": 1.0,
-"texture": ExtResource("11_walk06")
-}],
+"frames": [{ "duration": 1.0, "texture": ExtResource("6_walk01") }, { "duration": 1.0, "texture": ExtResource("7_walk02") }, { "duration": 1.0, "texture": ExtResource("8_walk03") }, { "duration": 1.0, "texture": ExtResource("9_walk04") }, { "duration": 1.0, "texture": ExtResource("10_walk05") }, { "duration": 1.0, "texture": ExtResource("11_walk06") }],
 "loop": true,
 "name": &"walk",
 "speed": 10.0
+}, {
+"frames": [{ "duration": 1.0, "texture": ExtResource("12_run01") }, { "duration": 1.0, "texture": ExtResource("13_run02") }, { "duration": 1.0, "texture": ExtResource("14_run03") }, { "duration": 1.0, "texture": ExtResource("15_run04") }, { "duration": 1.0, "texture": ExtResource("16_run05") }, { "duration": 1.0, "texture": ExtResource("17_run06") }],
+"loop": true,
+"name": &"run",
+"speed": 16.0
+}, {
+"frames": [{ "duration": 1.0, "texture": ExtResource("18_sit01") }, { "duration": 1.0, "texture": ExtResource("19_sit02") }],
+"loop": true,
+"name": &"sit",
+"speed": 2.0
+}, {
+"frames": [{ "duration": 1.0, "texture": ExtResource("20_slp01") }, { "duration": 1.0, "texture": ExtResource("21_slp02") }, { "duration": 1.0, "texture": ExtResource("22_slp03") }, { "duration": 1.0, "texture": ExtResource("23_slp04") }],
+"loop": true,
+"name": &"sleep",
+"speed": 3.0
 }]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_cat"]
