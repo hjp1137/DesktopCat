@@ -1,0 +1,12 @@
+# Godot 4 忽略文件
+.godot/
+*.translation
+
+# 导出与临时文件
+export_presets.cfg
+*.tmp
+*.log
+
+# 操作系统生成文件
+.DS_Store
+Thumbs.db
