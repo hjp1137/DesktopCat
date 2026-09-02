@@ -7,8 +7,17 @@ func _ready() -> void:
 	_setup_transparent_overlay()
 
 func _setup_transparent_overlay() -> void:
+	# 设置默认清屏颜色为全透明
+	RenderingServer.set_default_clear_color(Color(0, 0, 0, 0))
+	
+	# 设置视口透明
+	get_viewport().transparent_bg = true
 	get_tree().root.transparent_bg = true
+	
 	var window := get_window()
+	window.transparent = true
+	window.borderless = true
+	window.always_on_top = true
 	
 	if DisplayServer.get_name() != "headless":
 		var screen := window.current_screen
@@ -19,9 +28,6 @@ func _setup_transparent_overlay() -> void:
 		
 		print("[Main] 识别到屏幕 ID: %d, 位置: %s, 尺寸: %s" % [screen, screen_pos, screen_size])
 		
-		window.borderless = true
-		window.transparent = true
-		window.always_on_top = true
 		window.position = screen_pos
 		window.size = screen_size
 		
