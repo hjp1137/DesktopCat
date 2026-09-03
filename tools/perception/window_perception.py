@@ -128,6 +128,7 @@ class WindowPerceptionService:
         self.last_keys = None
         self.screen_info = {"index": 0, "x": 0, "y": 0, "width": 1920, "height": 1080}
         self.overlay_info = {"width": 1920, "height": 1080}
+        self.hotkey_states = {}
 
     def connect(self) -> bool:
         try:
@@ -148,8 +149,9 @@ class WindowPerceptionService:
             self._update_status()
             self._ensure_godot_hwnd()
             print(f"[Perception] Connected to DesktopCat ({self.host}:{self.port}), Screen {self.screen_info.get('index', 0)}")
-            print("[Perception] 提示: 点击小猫使其获取窗口焦点后，按键盘 F8 即可切换窗口几何线框显示。")
+            print("[Perception] 提示: 按键盘减号键[-] (数字0右侧)、字母键[V] 或 [Fn+F8]，即可随时切换窗口线框显示！")
             return True
+
 
         except Exception as e:
             if self.sock: self.sock.close()
@@ -230,13 +232,29 @@ class WindowPerceptionService:
                     self._send_msg(pkt)
                     self._recv_line()
                     print(f"[Perception] Window snapshot revision {self.revision}: {len(windows)} windows")
-                time.sleep(0.2)
+                self._check_global_hotkeys()
+                time.sleep(0.1)
+                self._check_global_hotkeys()
+                time.sleep(0.1)
             except Exception as e:
                 print(f"[Perception] Connection error: {e}, reconnecting in 2s...")
                 if self.sock: self.sock.close()
                 self.sock = None
                 self.last_keys = None
                 time.sleep(2.0)
+
+    def _check_global_hotkeys(self):
+        # 0x77: F8, 0xBD: - (数字0右侧减号), 0x56: V, 0x57: W
+        hotkeys = {0x77: "F8", 0xBD: "减号键(-)", 0x56: "V", 0x57: "W"}
+        for vk, name in hotkeys.items():
+            is_down = bool(user32.GetAsyncKeyState(vk) & 0x8000)
+            was_down = self.hotkey_states.get(vk, False)
+            self.hotkey_states[vk] = is_down
+            if is_down and not was_down:
+                print(f"[Perception] 检测到快捷键 [{name}]，已发送切换窗口调试线框指令！")
+                self._send_msg({"v": 1, "type": "command", "name": "TOGGLE_DEBUG_WINDOWS"})
+                self._recv_line()
+
 
 
 if __name__ == "__main__":

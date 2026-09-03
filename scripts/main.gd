@@ -101,7 +101,11 @@ func _handle_key_event(event: InputEventKey) -> bool:
 	match event.keycode:
 		KEY_ESCAPE: print("[Main] 接收到 ESC 键，安全退出。"); get_tree().quit(); return true
 		KEY_TAB: _apply_screen_layout((current_target_screen + 1) % DisplayServer.get_screen_count()); return true
-		KEY_F8: if window_world_model and window_world_model.has_method("toggle_debug_draw"): window_world_model.toggle_debug_draw(); return true
+		KEY_F8, KEY_MINUS, KEY_EQUAL, KEY_QUOTELEFT, KEY_V, KEY_W:
+			if window_world_model and window_world_model.has_method("toggle_debug_draw"):
+				window_world_model.toggle_debug_draw()
+			return true
+
 		KEY_C: if mouse_perception_controller and mouse_perception_controller.has_method("toggle_debug_follow"): mouse_perception_controller.toggle_debug_follow(); return true
 		KEY_1: command_manager.send_command(CommandManager.CatCommand.STOP); return true
 		KEY_2: command_manager.send_command(CommandManager.CatCommand.WALK_LEFT); return true
