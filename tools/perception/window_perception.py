@@ -198,11 +198,17 @@ class WindowPerceptionService:
     def run(self):
         print("[Perception] Starting Window Perception Service (5Hz)...")
         tick = 0
+        wait_logged = False
         while True:
             if not self.sock:
                 if not self.connect():
+                    if not wait_logged:
+                        print(f"[Perception] 正在等待 DesktopCat 启动 (未检测到 127.0.0.1:{self.port} 服务，请启动 DesktopCat_Standalone.exe)...")
+                        wait_logged = True
                     time.sleep(2.0)
                     continue
+                wait_logged = False
+
             try:
                 tick += 1
                 if tick % 10 == 0: self._update_status()
