@@ -121,10 +121,12 @@ def main():
                 client.run_stress_test(seconds=sec)
             elif c == "bad_json": client.send_raw("{malformed_json: true")
             elif c == "unknown": client.send_cmd("FLY_TO_MOON")
+            elif c in ["f8", "debug"]: client.send_cmd("TOGGLE_DEBUG_WINDOWS")
             elif c == "snapshot": client.send_json({"v": 1, "type": "surface_snapshot", "revision": 1})
             elif c == "help":
-                print("Commands: ping, status, jump, stop, left, right, run_left, run_right, sit, sleep, wake, auto, look <x> <y>, move <x> <y>, clear, stress [sec], bad_json, unknown, snapshot, quit")
+                print("Commands: ping, status, jump, stop, left, right, run_left, run_right, sit, sleep, wake, auto, look <x> <y>, move <x> <y>, clear, stress [sec], f8 (toggle debug), bad_json, unknown, snapshot, quit")
             else: client.send_raw(cmd_line)
+
         except (KeyboardInterrupt, EOFError): break
     client.close()
     return 0

@@ -156,9 +156,15 @@ func _handle_window_snapshot(data: Dictionary) -> void:
 
 func _handle_command_message(data: Dictionary) -> void:
 	var cmd_name := str(data.get("name", "")).to_upper()
+	if cmd_name == "TOGGLE_DEBUG_WINDOWS":
+		if is_instance_valid(window_world_model) and window_world_model.has_method("toggle_debug_draw"):
+			window_world_model.toggle_debug_draw()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
+		return
 	if not ALLOWED_COMMANDS.has(cmd_name):
 		_send_error("UNKNOWN_COMMAND", "Command not allowed: " + cmd_name)
 		return
+
 	var cmd_enum: int = ALLOWED_COMMANDS[cmd_name]
 	var raw_payload = data.get("payload", {})
 	var payload: Dictionary = raw_payload if typeof(raw_payload) == TYPE_DICTIONARY else {}

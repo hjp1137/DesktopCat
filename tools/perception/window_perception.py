@@ -148,8 +148,9 @@ class WindowPerceptionService:
             self._update_status()
             self._ensure_godot_hwnd()
             print(f"[Perception] Connected to DesktopCat ({self.host}:{self.port}), Screen {self.screen_info.get('index', 0)}")
-
+            print("[Perception] 提示: 点击小猫使其获取窗口焦点后，按键盘 F8 即可切换窗口几何线框显示。")
             return True
+
         except Exception as e:
             if self.sock: self.sock.close()
             self.sock = None

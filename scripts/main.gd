@@ -88,23 +88,33 @@ func update_mouse_passthrough(cat_pos: Vector2) -> void:
 	var p3 := cat_pos + Vector2(half_w, bottom_h); var p4 := cat_pos + Vector2(-half_w, bottom_h)
 	DisplayServer.window_set_mouse_passthrough(PackedVector2Array([p1, p2, p3, p4]))
 
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if _handle_key_event(event):
+			get_viewport().set_input_as_handled()
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
-		match event.keycode:
-			KEY_ESCAPE: print("[Main] 接收到 ESC 键，安全退出。"); get_tree().quit()
-			KEY_TAB: _apply_screen_layout((current_target_screen + 1) % DisplayServer.get_screen_count())
-			KEY_F8: if window_world_model and window_world_model.has_method("toggle_debug_draw"): window_world_model.toggle_debug_draw()
-			KEY_C: if mouse_perception_controller and mouse_perception_controller.has_method("toggle_debug_follow"): mouse_perception_controller.toggle_debug_follow()
-			KEY_1: command_manager.send_command(CommandManager.CatCommand.STOP)
-			KEY_2: command_manager.send_command(CommandManager.CatCommand.WALK_LEFT)
-			KEY_3: command_manager.send_command(CommandManager.CatCommand.WALK_RIGHT)
-			KEY_4: command_manager.send_command(CommandManager.CatCommand.RESUME_AUTO)
-			KEY_5: command_manager.send_command(CommandManager.CatCommand.JUMP)
-			KEY_6: command_manager.send_command(CommandManager.CatCommand.RUN_LEFT)
-			KEY_7: command_manager.send_command(CommandManager.CatCommand.RUN_RIGHT)
-			KEY_8: command_manager.send_command(CommandManager.CatCommand.SIT)
-			KEY_9: command_manager.send_command(CommandManager.CatCommand.SLEEP)
-			KEY_0: command_manager.send_command(CommandManager.CatCommand.WAKE)
+		_handle_key_event(event)
+
+func _handle_key_event(event: InputEventKey) -> bool:
+	match event.keycode:
+		KEY_ESCAPE: print("[Main] 接收到 ESC 键，安全退出。"); get_tree().quit(); return true
+		KEY_TAB: _apply_screen_layout((current_target_screen + 1) % DisplayServer.get_screen_count()); return true
+		KEY_F8: if window_world_model and window_world_model.has_method("toggle_debug_draw"): window_world_model.toggle_debug_draw(); return true
+		KEY_C: if mouse_perception_controller and mouse_perception_controller.has_method("toggle_debug_follow"): mouse_perception_controller.toggle_debug_follow(); return true
+		KEY_1: command_manager.send_command(CommandManager.CatCommand.STOP); return true
+		KEY_2: command_manager.send_command(CommandManager.CatCommand.WALK_LEFT); return true
+		KEY_3: command_manager.send_command(CommandManager.CatCommand.WALK_RIGHT); return true
+		KEY_4: command_manager.send_command(CommandManager.CatCommand.RESUME_AUTO); return true
+		KEY_5: command_manager.send_command(CommandManager.CatCommand.JUMP); return true
+		KEY_6: command_manager.send_command(CommandManager.CatCommand.RUN_LEFT); return true
+		KEY_7: command_manager.send_command(CommandManager.CatCommand.RUN_RIGHT); return true
+		KEY_8: command_manager.send_command(CommandManager.CatCommand.SIT); return true
+		KEY_9: command_manager.send_command(CommandManager.CatCommand.SLEEP); return true
+		KEY_0: command_manager.send_command(CommandManager.CatCommand.WAKE); return true
+	return false
+
 
 func get_overlay_info() -> Dictionary:
 	var window := get_window()

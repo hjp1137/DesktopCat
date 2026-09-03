@@ -48,9 +48,14 @@ func toggle_debug_draw() -> bool:
 	return debug_draw_enabled
 
 func _draw() -> void:
-	if not debug_draw_enabled or windows_by_id.is_empty():
+	if not debug_draw_enabled:
 		return
 	var font := ThemeDB.fallback_font
+	var banner_text := "[F8 Debug] Window Geometry: ON | Windows: %d" % windows_by_id.size()
+	if windows_by_id.is_empty():
+		banner_text += " (0 windows - please run: python tools/perception/window_perception.py)"
+	draw_string(font, Vector2(24.0, 36.0), banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.2, 1.0, 0.4, 0.95))
+
 	var font_size := 12
 	for win in windows_by_id.values():
 		var r: Rect2 = win.rect
@@ -59,3 +64,4 @@ func _draw() -> void:
 		draw_rect(r, border_col, false, 2.0)
 		var label := "[%s] %s" % [win.id, win.title.substr(0, 20)]
 		draw_string(font, r.position + Vector2(6.0, 16.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, border_col)
+
