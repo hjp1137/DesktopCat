@@ -2,8 +2,11 @@ extends SceneTree
 
 const SurfaceClass = preload("res://scripts/world/surface.gd")
 const SurfaceWorldModelClass = preload("res://scripts/world/surface_world_model.gd")
+const TraversalPlanClass = preload("res://scripts/navigation/traversal_plan.gd")
+const AutonomousJumpPlannerClass = preload("res://scripts/navigation/autonomous_jump_planner.gd")
 
 func _init() -> void:
+
 	print("========== 开始执行 T12 Surface World 自动化自验证 ==========")
 	var cat_scene: PackedScene = load("res://scenes/cat.tscn")
 	assert(cat_scene != null, "应当能够加载 scenes/cat.tscn")
@@ -520,17 +523,122 @@ func _init() -> void:
 	assert(nav_graph.find_nearest_node(Vector2(110.0, 210.0)).surface_id == "Top", "最近节点查询正确")
 	print("[PASS] 测试 42: 全图原子重建与图查询 API 验证成功")
 
+	# 测试 43: TraversalPlan 数据结构与超时计算
+	var plan = TraversalPlanClass.new("A", "B", 0, 1, "WALK", 150.0, 320.0, 120.0, 180.0, 300.0, 350.0, 0.85, 250.0, 1)
+	assert(plan.source_surface_id == "A" and plan.target_surface_id == "B", "基础字段赋值正确")
+	assert(plan.timeout >= 2.5, "超时时间计算符合公式")
+	var p_dict = plan.to_dict()
+	assert(p_dict.action == "JUMP_WALK" and p_dict.direction == "RIGHT", "to_dict 序列化正确")
+	print("[PASS] 测试 43: TraversalPlan 数据结构与超时计算验证成功")
+
+	# 测试 44: AutonomousJumpPlanner 初始化与状态机前置条件检测
+	var planner = AutonomousJumpPlannerClass.new(cat, cmd_mgr, nav_graph, surf_model)
+	root.add_child(planner)
+	assert(planner.current_phase == AutonomousJumpPlannerClass.TraversalPhase.IDLE, "初始相位应为 IDLE")
+	cat.current_surface_id = "Top"
+	cat.is_grounded = true
+	cat.current_mode = Cat.ControlMode.AUTO
+	cat.change_state(Cat.CatState.WALK)
+	planner.cooldown_timer = 0.0
+	assert(planner.can_plan_traversal() == true, "具备地面有效边时应当可以规划")
+	cat.change_state(Cat.CatState.SLEEP)
+	assert(planner.can_plan_traversal() == false, "睡眠状态下不可规划")
+	cat.change_state(Cat.CatState.WALK)
+	print("[PASS] 测试 44: AutonomousJumpPlanner 初始化与前置条件验证成功")
+
+	# 测试 45: try_plan_traversal 目标边选择与起落点区间内随机选择
+	var plan_ok: bool = planner.try_plan_traversal()
+	assert(plan_ok == true, "try_plan_traversal 应当成功选择出度边")
+	assert(planner.current_phase == AutonomousJumpPlannerClass.TraversalPhase.APPROACH_TAKEOFF, "进入 APPROACH_TAKEOFF 相位")
+	assert(planner.current_plan != null, "当前计划非空")
+	assert(planner.current_plan.takeoff_x >= planner.current_plan.takeoff_x_min and planner.current_plan.takeoff_x <= planner.current_plan.takeoff_x_max, "起跳点处于安全区间内")
+	assert(planner.current_plan.landing_target_x >= planner.current_plan.landing_x_min and planner.current_plan.landing_target_x <= planner.current_plan.landing_x_max, "落地点处于安全区间内")
+	print("[PASS] 测试 45: 目标边加权选择与起落点区间约束验证成功")
+
+	# 测试 46: 助跑空间不足时安全拒绝该边
+	var s_short = SurfaceClass.new("Short", "wS", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 100.0, 300.0, 115.0, 300.0, true, true)
+	var edge_fake_run = NavigationEdgeClass.new("Short", "Far", NavigationEdgeClass.ActionType.JUMP_RUN, 1, "RUN", 110.0, 110.0, 200.0, 200.0, 0.8, 90.0, 0.0, 2.0, 0.5)
+	surf_model.surfaces_by_id["Short"] = s_short
+	cat.current_surface_id = "Short"
+	nav_graph.outgoing_edges["Short"] = [edge_fake_run]
+	planner.current_phase = AutonomousJumpPlannerClass.TraversalPhase.IDLE
+	planner.cooldown_timer = 0.0
+	assert(planner.try_plan_traversal() == false, "跑道长度(15px)小于35px助跑需求时应当拒绝执行")
+	print("[PASS] 测试 46: 跑道助跑空间不足安全拒绝验证成功")
+
+	# 测试 47: 走位靠近起跳点与起跳触发
+	cat.current_surface_id = "Top"
+	cat.position = Vector2(120.0, 200.0)
+	cat.is_grounded = true
+	cat.current_mode = Cat.ControlMode.AUTO
+	planner.current_phase = AutonomousJumpPlannerClass.TraversalPhase.IDLE
+	planner.cooldown_timer = 0.0
+	assert(planner.try_plan_traversal() == true, "Top 表面规划应当成功")
+	assert(planner.current_phase == AutonomousJumpPlannerClass.TraversalPhase.APPROACH_TAKEOFF, "进入走位阶段")
+	cat.position.x = planner.current_plan.takeoff_x - 40.0
+	planner.update(0.016)
+	assert(cat.direction == 1.0, "小猫应被调度向右移动靠近起跳点")
+	cat.position.x = planner.current_plan.takeoff_x
+	planner.update(0.016)
+	planner.update(0.016)
+	assert(planner.current_phase == AutonomousJumpPlannerClass.TraversalPhase.AIRBORNE, "应进入 AIRBORNE 相位")
+	assert(cat.current_state == Cat.CatState.JUMP, "小猫状态应进入 JUMP")
+	assert(cat.horizontal_throw_speed != 0.0, "起跳时应成功继承水平移动速度")
+	print("[PASS] 测试 47: 走位接近与到位起跳触发验证成功")
+
+	# 测试 48: 滞空着陆成功结算与历史表面记录
+	var tgt_id_test = planner.current_plan.target_surface_id
+	cat.is_grounded = true
+	cat.current_surface_id = tgt_id_test
+	planner.update(0.016)
+	planner.update(0.016)
+	assert(planner.current_phase == AutonomousJumpPlannerClass.TraversalPhase.IDLE, "成功后归位 IDLE")
+	assert(planner.stats["success"] >= 1, "成功计数应增加")
+	assert(planner.recent_surface_history.has(tgt_id_test), "目标表面应记录至近期历史")
+	print("[PASS] 测试 48: 滞空着陆成功结算与历史记录验证成功")
+
+	# 测试 49: 失败偏离目标与短期黑名单隔离
+	cat.current_surface_id = "Top"
+	cat.current_mode = Cat.ControlMode.AUTO
+	cat.change_state(Cat.CatState.WALK)
+	planner.cooldown_timer = 0.0
+	assert(planner.try_plan_traversal() == true, "再次规划应当成功")
+	var tgt_to_fail = planner.current_plan.target_surface_id
+	planner.current_phase = AutonomousJumpPlannerClass.TraversalPhase.AIRBORNE
+	cat.is_grounded = true
+	cat.current_surface_id = "different_missed_platform"
+	planner.update(0.016)
+	planner.update(0.016)
+	assert(planner.stats["failed"] >= 1, "失败计数应增加")
+	assert(planner.failed_edges_blacklist.has(tgt_to_fail), "失败目标应被纳入短期黑名单")
+	print("[PASS] 测试 49: 失败偏离目标与黑名单隔离验证成功")
+
+	# 测试 50: 用户显式命令与 DRAG 中断取消
+	cat.current_surface_id = "Top"
+	cat.current_mode = Cat.ControlMode.AUTO
+	cat.change_state(Cat.CatState.WALK)
+	planner.cooldown_timer = 0.0
+	assert(planner.try_plan_traversal() == true, "中断测试规划应成功")
+	assert(planner.current_phase == AutonomousJumpPlannerClass.TraversalPhase.APPROACH_TAKEOFF, "进入靠近阶段")
+	cat.change_state(Cat.CatState.DRAG)
+	planner.update(0.016)
+	assert(planner.current_phase == AutonomousJumpPlannerClass.TraversalPhase.IDLE, "用户拖拽应立即取消自主规划")
+	assert(planner.current_plan == null, "计划应被清空")
+	assert(planner.stats["cancelled"] >= 1, "取消计数应增加")
+	print("[PASS] 测试 50: 用户显式命令与 DRAG 中断取消验证成功")
+
 
 	fusion_builder.queue_free()
-
 	vis_model.queue_free()
 	ui_model.queue_free()
 	surf_model.queue_free()
 	bridge.stop_server(); bridge.queue_free()
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
-	print("========== T17 Platform Navigation Graph 单元测试全部通过 ==========")
+	planner.queue_free()
+	print("========== T18 Autonomous Jump Planner 单元测试全部通过 ==========")
 	quit(0)
+
 
 
 

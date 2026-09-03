@@ -38,6 +38,12 @@
   - 建立 `NavigationNode` 与 `NavigationEdge`，扣除半宽计算安全落地区间，区分 `JUMP_WALK`、`JUMP_RUN`、`DROP` 边；
   - 实施空间初筛、One-Way 下落解判定与连续段相交检测（Swept Crossing Occlusion）；
   - 支持 150ms Debounce 防抖原子提交与完整查询 API，支持 `F14`（免 Fn 键 `G` 切换、`T` 键输出）调试 HUD。
+- **T18**：**自主跳跃规划与执行系统 (Autonomous Jump Planner & Execution)**：
+  - 建立独立状态机（IDLE, APPROACH_TAKEOFF, READY_TO_JUMP, AIRBORNE, VERIFY_LANDING, SUCCESS, FAILED）；
+  - 智能边加权选取与 Top-3 轮盘随机选择，结合助跑跑道物理检查（$\ge 35\text{ px}$）与历史去重惩罚；
+  - 惯性起跳 Handover（到起跳点直接触发 JUMP 继承水平速度），飞行过程 100% 依赖 T13 Cat Physics（无 Teleport、无 Tween、无空中作弊吸附）；
+  - 偏离目标判定为 `MISSED_TARGET` 并实施短期黑名单隔离；用户显式命令与鼠标拖拽（DRAG）最高优先级立即熔断；
+  - 支持 `F15`（免 Fn 键 `X` 切换、`P` 键单次触发规划）调试视图，绘制起跳点、落地区间与 Predicted Arc 抛物线。
 
 ## 运行方式与快捷键
 
@@ -51,6 +57,7 @@
   - `F12` / `J`：切换【Visual Geometry 视觉几何】调试线框
   - `F13` / `H` / `Y`：切换【Unified Surface Fusion 融合诊断】HUD 视图
   - `F14` / `G`：切换【Platform Navigation Graph 平台导航图】调试线框（按 `T` 输出当前导航摘要）
+  - `F15` / `X`：切换【Autonomous Jump Planner 自主跳跃规划】调试视图（按 `P` 单次触发自主规划）
   - `TAB`：切换多显示器并重新生成表面与清理UI缓存
   - `C`：切换指针好奇跟随模式
   - `ESC` / `Alt + F4`：安全退出
@@ -60,5 +67,6 @@
   ```bash
   python tools/perception/perception_service.py
   ```
-  在控制台或桌面全局按 `F8`~`F14` 或免 Fn 键 `G`/`T` 查看实时导航图与物理表面！
+  在控制台或桌面全局按 `F8`~`F15` 或免 Fn 键 `G`/`T`/`X`/`P` 查看实时导航图与自主跳跃规划！
+
 

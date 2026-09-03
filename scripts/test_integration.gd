@@ -70,6 +70,9 @@ func _process(delta: float) -> bool:
 		var ev_f14 := InputEventKey.new(); ev_f14.keycode = KEY_G; ev_f14.pressed = true
 		main_scene._input(ev_f14)
 		assert(main_scene.platform_navigation_graph.debug_draw_enabled == true, "F14/G 应成功开启 Nav Graph Debug")
+		var ev_f15 := InputEventKey.new(); ev_f15.keycode = KEY_X; ev_f15.pressed = true
+		main_scene._input(ev_f15)
+		assert(main_scene.autonomous_jump_planner.debug_draw_enabled == true, "F15/X 应成功开启 Traversal Debug")
 
 		print("========== 阶段 4c: 验证小猫下落着陆到 Chrome 顶边 ==========")
 		main_scene.cat.position = Vector2(400.0, 100.0)
@@ -86,9 +89,12 @@ func _process(delta: float) -> bool:
 		assert(main_scene.platform_navigation_graph.nodes.size() > 0, "导航图应当拥有节点")
 		var chrome_edges = main_scene.platform_navigation_graph.get_edges_from("0x30094:top")
 		print("[Integration] Chrome 顶边导航出度边数量: %d" % chrome_edges.size())
+		assert(main_scene.autonomous_jump_planner != null, "自主跳跃规划器应当已实例化")
+		print("[Integration] 自主跳跃规划器状态: %d, 冷却: %.1f" % [main_scene.autonomous_jump_planner.current_phase, main_scene.autonomous_jump_planner.cooldown_timer])
 
 		print("========== 阶段 5: 断开连接 ==========")
 		tcp_client.disconnect_from_host()
+
 
 		tcp_client = null
 

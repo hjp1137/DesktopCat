@@ -38,9 +38,11 @@ var surface_world_model: Node = null
 var ui_element_world_model: Node = null
 var visual_world_model: Node = null
 var surface_fusion_builder: Node = null
-var platform_navigation_graph: Node = null
+var platform_navigation_graph: RefCounted = null
+var autonomous_jump_planner: Node = null
 
 func _ready() -> void:
+
 
 
 
@@ -264,6 +266,18 @@ func _handle_command_message(data: Dictionary) -> void:
 			platform_navigation_graph.print_current_nav_summary()
 		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
 		return
+	if cmd_name in ["TOGGLE_DEBUG_TRAVERSAL", "TOGGLE_DEBUG_PLANNER"]:
+		if is_instance_valid(autonomous_jump_planner) and autonomous_jump_planner.has_method("toggle_debug_draw"):
+			autonomous_jump_planner.toggle_debug_draw()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
+		return
+	if cmd_name in ["PLAN_TRAVERSAL", "PLAN_JUMP"]:
+		var planned: bool = false
+		if is_instance_valid(autonomous_jump_planner) and autonomous_jump_planner.has_method("try_plan_traversal"):
+			planned = autonomous_jump_planner.try_plan_traversal()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name, "planned": planned})
+		return
+
 
 
 

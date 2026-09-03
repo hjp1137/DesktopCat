@@ -129,9 +129,12 @@ def main():
             elif c in ["f13", "fusion", "diag"]: client.send_cmd("TOGGLE_DEBUG_FUSION")
             elif c in ["f14", "nav", "graph"]: client.send_cmd("TOGGLE_DEBUG_NAV")
             elif c == "nav_status": client.send_cmd("NAV")
+            elif c in ["f15", "traversal", "planner"]: client.send_cmd("TOGGLE_DEBUG_TRAVERSAL")
+            elif c in ["plan", "plan_jump"]: client.send_cmd("PLAN_TRAVERSAL")
             elif c == "snapshot": client.send_json({"v": 1, "type": "surface_snapshot", "revision": 1})
             elif c == "help":
-                print("Commands: ping, status, jump, stop, left, right, run_left, run_right, sit, sleep, wake, auto, look <x> <y>, move <x> <y>, clear, stress [sec], f8, f9, f10, f11, f12, f13, f14 (nav), nav_status, snapshot, quit")
+                print("Commands: ping, status, jump, stop, left, right, run_left, run_right, sit, sleep, wake, auto, look <x> <y>, move <x> <y>, clear, stress [sec], f8, f9, f10, f11, f12, f13, f14 (nav), f15 (traversal), plan, nav_status, snapshot, quit")
+
             else: client.send_raw(cmd_line)
 
 

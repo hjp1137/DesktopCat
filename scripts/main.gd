@@ -9,6 +9,7 @@ const UIElementWorldModelClass = preload("res://scripts/world/ui_element_world_m
 const VisualWorldModelClass = preload("res://scripts/world/visual_world_model.gd")
 const SurfaceFusionBuilderClass = preload("res://scripts/world/surface_fusion_builder.gd")
 const PlatformNavigationGraphClass = preload("res://scripts/navigation/platform_navigation_graph.gd")
+const AutonomousJumpPlannerClass = preload("res://scripts/navigation/autonomous_jump_planner.gd")
 
 @onready var cat: Node2D = $Cat
 var command_manager: CommandManager = null
@@ -21,7 +22,9 @@ var ui_element_world_model: Node2D = null
 var visual_world_model: Node2D = null
 var surface_fusion_builder: Node2D = null
 var platform_navigation_graph: RefCounted = null
+var autonomous_jump_planner: Node2D = null
 var current_target_screen: int = 0
+
 
 
 func _ready() -> void:
@@ -75,6 +78,8 @@ func _ready() -> void:
 	platform_navigation_graph.surface_world_model = surface_world_model
 	add_child(platform_navigation_graph.create_drawer())
 
+	autonomous_jump_planner = AutonomousJumpPlannerClass.new(cat, command_manager, platform_navigation_graph, surface_world_model)
+	add_child(autonomous_jump_planner)
 
 	window_world_model.window_world_updated.connect(func(_r): surface_fusion_builder.request_fusion())
 	ui_element_world_model.ui_world_updated.connect(func(_r): surface_fusion_builder.request_fusion())
@@ -92,8 +97,10 @@ func _ready() -> void:
 	external_bridge.set("visual_world_model", visual_world_model)
 	external_bridge.set("surface_fusion_builder", surface_fusion_builder)
 	external_bridge.set("platform_navigation_graph", platform_navigation_graph)
+	external_bridge.set("autonomous_jump_planner", autonomous_jump_planner)
 
 	add_child(external_bridge)
+
 
 
 
@@ -172,7 +179,7 @@ func _handle_key_event(event: InputEventKey) -> bool:
 			if window_world_model and window_world_model.has_method("toggle_debug_draw"):
 				window_world_model.toggle_debug_draw()
 			return true
-		KEY_F9, KEY_B, KEY_P:
+		KEY_F9, KEY_B:
 			if surface_world_model and surface_world_model.has_method("toggle_debug_draw"):
 				surface_world_model.toggle_debug_draw()
 			return true
@@ -196,10 +203,20 @@ func _handle_key_event(event: InputEventKey) -> bool:
 			if platform_navigation_graph and platform_navigation_graph.has_method("toggle_debug_draw"):
 				platform_navigation_graph.toggle_debug_draw()
 			return true
+		KEY_F15, KEY_X:
+			if autonomous_jump_planner and autonomous_jump_planner.has_method("toggle_debug_draw"):
+				autonomous_jump_planner.toggle_debug_draw()
+			return true
+		KEY_P:
+			if autonomous_jump_planner and autonomous_jump_planner.has_method("try_plan_traversal"):
+				var ok: bool = autonomous_jump_planner.try_plan_traversal()
+				print("[Main] P 键触发自主跳跃规划: %s" % ("成功" if ok else "未触发(条件未满足/无有效边/冷却中)"))
+			return true
 		KEY_T:
 			if platform_navigation_graph and platform_navigation_graph.has_method("print_current_nav_summary"):
 				platform_navigation_graph.print_current_nav_summary()
 			return true
+
 
 
 		KEY_C: if mouse_perception_controller and mouse_perception_controller.has_method("toggle_debug_follow"): mouse_perception_controller.toggle_debug_follow(); return true

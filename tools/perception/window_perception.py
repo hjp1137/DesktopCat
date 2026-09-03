@@ -313,6 +313,20 @@ class WindowPerceptionService:
                     print(f"[Perception] 检测到快捷键 [{name}]，输出当前平台导航可达摘要...")
                     self._send_msg({"v": 1, "type": "command", "name": "NAV"})
                 self._recv_line()
+        hotkeys_traversal = {0x58: "X", 0x50: "P"}
+        for vk, name in hotkeys_traversal.items():
+            is_down = bool(user32.GetAsyncKeyState(vk) & 0x8000)
+            was_down = self.hotkey_states.get(vk, False)
+            self.hotkey_states[vk] = is_down
+            if is_down and not was_down:
+                if name == "X":
+                    print(f"[Perception] 检测到快捷键 [{name}]，切换【F15 自主跳跃规划】调试线框...")
+                    self._send_msg({"v": 1, "type": "command", "name": "TOGGLE_DEBUG_TRAVERSAL"})
+                else:
+                    print(f"[Perception] 检测到快捷键 [{name}]，触发一次【自主跳跃规划】...")
+                    self._send_msg({"v": 1, "type": "command", "name": "PLAN_TRAVERSAL"})
+                self._recv_line()
+
 
 
 

@@ -26,6 +26,10 @@
                    └─ (T17 Platform Navigation Graph: 150ms Debounce / Ballistics / Swept Occlusion)
                         ↓
                       [PlatformNavigationGraph] (F14/G/T: JUMP_WALK, JUMP_RUN, DROP 有向可达图与查询 API)
+                        ↓
+                      [AutonomousJumpPlanner] (T18: F15/X/P: Top-3 Selection / Run-Up Check / Inertial Jump)
+                        ↓
+                      [CommandManager] ──> [Cat Physics (T13 Swept Landing)]
 ```
 
 ## 3. 阶段演进规划
@@ -34,8 +38,9 @@
 3. **T13（已完成）**：多表面动态物理系统（Multi-Surface Cat Physics）；
 4. **T14（已完成）**：Windows UI Automation 元素感知（UI Automation Element Perception）；
 5. **T15（已完成）**：轻量视觉几何感知（Lightweight Visual Geometry Perception）；
-6. **T16（已完成）**：统一表面融合与几何简化（Unified Surface Fusion & Simplification），通过 `SurfaceFusionBuilder` 建立唯一 `SurfaceWorldModel`，使小猫天然在文本、按钮、输入框、图片与视觉线条上行走与着陆；
-7. **T17（已完成）**：平台导航图系统 (Platform Navigation Graph)，基于真实动力学构建有向图与查询接口；
-8. **T18**：跳跃决策与动作执行系统 (Jump Decision & Execution)；
+6. **T16（已完成）**：统一表面融合与几何简化（Unified Surface Fusion & Simplification）；
+7. **T17（已完成）**：平台导航图系统 (Platform Navigation Graph)；
+8. **T18（已完成）**：自主跳跃规划与执行系统 (Autonomous Jump Planner & Execution)，完全零作弊物理穿越；
 9. **T19**：抓边与攀爬系统 (Edge Grab + Climb)；
 10. **T20**：自主探索系统 (Autonomous Exploration)。
+

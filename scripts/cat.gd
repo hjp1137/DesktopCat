@@ -247,17 +247,25 @@ func on_surface_world_updated(_rev: int = 0) -> void:
 
 func handle_command(command: int, payload: Dictionary = {}) -> void:
 	if current_state == CatState.DRAG and command < 5: print("[Cat] DRAG 期间忽略指令"); return
-	if command < 13: has_move_target = false
+	var from_planner: bool = (str(payload.get("source", "")) == "planner")
+	if command < 13 and not from_planner: has_move_target = false
 	match command:
-		0: current_mode = ControlMode.COMMAND; command_ground_state = CatState.IDLE; if is_grounded: change_state(CatState.IDLE)
-		1: current_mode = ControlMode.COMMAND; direction = -1.0; command_ground_state = CatState.WALK; if is_grounded: change_state(CatState.WALK)
-		2: current_mode = ControlMode.COMMAND; direction = 1.0; command_ground_state = CatState.WALK; if is_grounded: change_state(CatState.WALK)
+		0: if not from_planner: current_mode = ControlMode.COMMAND; command_ground_state = CatState.IDLE; if is_grounded: change_state(CatState.IDLE)
+		1: if not from_planner: current_mode = ControlMode.COMMAND; direction = -1.0; if not from_planner: command_ground_state = CatState.WALK; if is_grounded: change_state(CatState.WALK)
+		2: if not from_planner: current_mode = ControlMode.COMMAND; direction = 1.0; if not from_planner: command_ground_state = CatState.WALK; if is_grounded: change_state(CatState.WALK)
 		3: current_mode = ControlMode.AUTO; print("[Cat] 恢复 AUTO 模式"); if is_grounded: change_state(CatState.WALK)
+
 		4:
 			if current_state == CatState.SLEEP: change_state(CatState.IDLE); sleep_cooldown = 15.0
 			if not is_grounded: print("[Cat] JUMP ignored: airborne"); return
 			is_grounded = false; current_surface_id = ""; current_surface = null
+			var req_spd_mode: String = payload.get("speed_mode", "")
+			if req_spd_mode == "RUN" or current_state == CatState.RUN or command_ground_state == CatState.RUN:
+				horizontal_throw_speed = direction * run_speed
+			elif req_spd_mode == "WALK" or current_state == CatState.WALK or command_ground_state == CatState.WALK:
+				horizontal_throw_speed = direction * walk_speed
 			vertical_velocity = jump_velocity; change_state(CatState.JUMP)
+
 		5: # DRAG_START
 			if current_state == CatState.SLEEP: sleep_cooldown = 15.0; command_ground_state = CatState.IDLE
 			drag_offset = position - Vector2(payload.get("mouse_pos", position)); horizontal_throw_speed = 0.0; vertical_velocity = 0.0
@@ -282,8 +290,9 @@ func handle_command(command: int, payload: Dictionary = {}) -> void:
 					is_grounded = false; current_surface_id = ""; current_surface = null
 					vertical_velocity = maxf(0.0, tv.y); change_state(CatState.FALL)
 
-		8: current_mode = ControlMode.COMMAND; direction = -1.0; command_ground_state = CatState.RUN; if is_grounded: change_state(CatState.RUN)
-		9: current_mode = ControlMode.COMMAND; direction = 1.0; command_ground_state = CatState.RUN; if is_grounded: change_state(CatState.RUN)
+		8: if not from_planner: current_mode = ControlMode.COMMAND; direction = -1.0; if not from_planner: command_ground_state = CatState.RUN; if is_grounded: change_state(CatState.RUN)
+		9: if not from_planner: current_mode = ControlMode.COMMAND; direction = 1.0; if not from_planner: command_ground_state = CatState.RUN; if is_grounded: change_state(CatState.RUN)
+
 		10: current_mode = ControlMode.COMMAND; command_ground_state = CatState.SIT; if is_grounded: change_state(CatState.SIT)
 		11: current_mode = ControlMode.COMMAND; command_ground_state = CatState.SLEEP; if is_grounded: change_state(CatState.SLEEP)
 		12: if current_state == CatState.SLEEP: sleep_cooldown = 15.0; change_state(CatState.IDLE); print("[Cat] 被唤醒并进入 IDLE")
