@@ -24,14 +24,16 @@
                     │  [Cat Physics & Behavior] (在窗口、按钮、文本、视觉线条上真实着陆与生活行走)
                     │    ↓
                     │  [Edge Grab & Hang System] (T19: F16/Z/G: Swept Grab / Grab Zone / Outside Approach / Hang & Release)
+                    │    ↓
+                    │  [Edge Climb-Up System] (T20: F17/H/G: Procedural PULL_UP / SHIFT_IN / Clearance / Rebind)
                     │
                     └─ (T17 Platform Navigation Graph: 150ms Debounce / Ballistics / Swept Occlusion)
                          ↓
                        [PlatformNavigationGraph] (F14/G/T: JUMP_WALK, JUMP_RUN, DROP 有向可达图与查询 API)
                          ↓
-                       [AutonomousJumpPlanner] (T18: F15/X/P: Top-3 Selection / Run-Up Check / Inertial Jump / Partial Grab)
+                       [AutonomousJumpPlanner] (T18: F15/X/P: Top-3 Selection / Run-Up Check / Inertial Jump / Recovery Success)
                          ↓
-                       [CommandManager] ──> [Cat Physics (T13 Swept Landing / T19 Edge Grab)]
+                       [CommandManager] ──> [Cat Physics (T13 Landing / T19 Grab / T20 Climb-Up)]
 ```
 
 ## 3. 阶段演进规划
@@ -44,5 +46,7 @@
 7. **T17（已完成）**：平台导航图系统 (Platform Navigation Graph)；
 8. **T18（已完成）**：自主跳跃规划与执行系统 (Autonomous Jump Planner & Execution)，完全零作弊物理穿越；
 9. **T19（已完成）**：平台抓边与悬挂系统 (Platform Edge Grab & Hang)，实现临界边缘抓取、动态跟随与释放；
-10. **T20**：边缘攀爬翻越系统 (Edge Climb-Up)；
-11. **T21**：垂直墙面攀爬与全域探索系统 (Wall / Vertical Climbing & Exploration)。
+10. **T20（已完成）**：边缘攀爬翻越系统 (Edge Climb-Up)，实现抓边后的两段式登顶翻越与T18恢复成功闭环；
+11. **T21**：垂直墙面攀爬与全域探索系统 (Wall / Vertical Climbing & Exploration)；
+12. **T22**：攀爬与跳跃融合导航路径规划 (Climb & Jump Fusion Navigation)；
+13. **T23**：桌面全域自主探索与交互系统 (Autonomous Screen Exploration)。

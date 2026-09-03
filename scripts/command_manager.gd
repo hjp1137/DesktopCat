@@ -18,7 +18,8 @@ enum CatCommand {
 	LOOK_AT_POSITION,
 	MOVE_TO_POSITION,
 	CLEAR_TARGET,
-	RELEASE_EDGE
+	RELEASE_EDGE,
+	CLIMB_UP
 }
 
 signal command_dispatched(cmd: CatCommand, payload: Dictionary)

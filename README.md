@@ -51,8 +51,17 @@
   - 支持动态表面移动跟随与超大位移（$> 150\text{ px}$）安全脱落，表面消失时自动尝试等价重绑（Rebind）；
   - AUTO 模式悬挂 2.0～3.5 秒后自动释放，COMMAND 模式持续保持；新增 `RELEASE_EDGE` 指令（按键 `G`，悬挂时释放脱手，其余状态保留 F14 切换）；
   - 鼠标拖拽（`DRAG`）最高优先级瞬间解除悬挂；T18 规划器协同记录 `PARTIAL_EDGE_GRAB`；
-  - 支持 `F16`（免 Fn 键 `Z`）调试视图，实时绘制端点、L/R 标记、Grab Zone 方框与抓点；
-  - 明确：当前阶段仅实现 Grab + Hang + Release，不能 Climb Up（留待 T20）。
+  - 支持 `F16`（免 Fn 键 `Z`）调试视图，实时绘制端点、L/R 标记、Grab Zone 方框与抓点。
+- **T20**：**平台边缘攀爬翻越系统 (Platform Edge Climb-Up)**：
+  - 新增正式状态 `CatState.CLIMB_UP`，两段式受控 Procedural Motion（PULL_UP 向上拉升 + SHIFT_IN 向内平移）；
+  - 新增 `ClimbTarget` 数据结构，严格限定只能翻上抓取的同一个表面；
+  - 几何与安全校验：`CLIMB_INWARD_MARGIN = 20.0`, `MIN_CLIMB_UP_PLATFORM_LENGTH = 48.0`，平台过窄或落脚上方受阻（Clearance Blocked）时安全拒绝；
+  - 动态跟踪与自愈：慢速位移平滑跟随，大幅跳变（$>150\text{px}$）或表面丢失时安全 cancel 转入 FALL；
+  - 模式分发：AUTO 停顿 0.5s 后自动翻越，COMMAND 模式按 `H` 触发翻越；
+  - 优先级与中断：`DRAG` 与 `G`（RELEASE_EDGE）最高优先级瞬间打断攀爬；
+  - T18 规划器协同：目标抓边挂起等待翻越，登顶后结算为 SUCCESS 并统计 `edge_grab_recovery_success`；
+  - 支持 `F17` 调试视图，实时绘制攀爬两段轨迹、Clearance 框与相位；
+  - 明确：T20 仅实现 Edge → Platform Top 边缘登顶，尚未实现竖直连续墙面爬行（Wall Climb）。
 
 ## 运行方式与快捷键
 
@@ -64,11 +73,14 @@
   - `F10` / `N` / `M`：切换【Cat 物理接触点与站立表面】高亮
   - `F11` / `K` / `O` / `U`：切换【UI Automation 控件几何】调试线框
   - `F12` / `J`：切换【Visual Geometry 视觉几何】调试线框
-  - `F13` / `H` / `Y`：切换【Unified Surface Fusion 融合诊断】HUD 视图
-  - `F14` / `G`：切换【Platform Navigation Graph 平台导航图】调试线框（小猫悬挂时按 `G` 触发 RELEASE_EDGE，按 `T` 输出当前导航摘要）
+  - `F13` / `Y`：切换【Unified Surface Fusion 融合诊断】HUD 视图
+  - `H`：小猫悬挂在平台边缘时触发【CLIMB_UP】攀爬登顶；非悬挂状态切换融合诊断 HUD
+  - `G`：若处于悬挂或攀爬状态则触发【RELEASE_EDGE】脱手下落；其余状态切换平台导航图
+  - `F14`：切换【Platform Navigation Graph 平台导航图】调试线框（按 `T` 输出当前导航摘要）
   - `F15` / `X`：切换【Autonomous Jump Planner 自主跳跃规划】调试视图（按 `P` 单次触发自主规划）
   - `F16` / `Z`：切换【Edge Grab 平台边缘抓取】调试视图（显示端点、判定框与抓取爪点）
-  - `TAB`：切换多显示器并重新生成表面与清理UI缓存（悬挂时自动安全脱落）
+  - `F17`：切换【Edge Climb-Up 平台翻越攀爬】调试视图（显示攀爬轨迹、Clearance框与相位）
+  - `TAB`：切换多显示器并重新生成表面与清理UI缓存（悬挂与攀爬时自动安全脱落）
   - `C`：切换指针好奇跟随模式
   - `ESC` / `Alt + F4`：安全退出
 

@@ -792,10 +792,190 @@ func _init() -> void:
 	cat.grabbed_surface_id = planner.current_plan.target_surface_id
 	cat.change_state(Cat.CatState.EDGE_HANG)
 	planner.update(0.016)
-	assert(planner.current_phase == AutonomousJumpPlannerClass.TraversalPhase.IDLE, "抓住目标边缘后规划器应结束当前穿越")
+	assert(planner.current_phase == AutonomousJumpPlannerClass.TraversalPhase.AIRBORNE, "抓住目标边缘时规划器应挂起等待攀爬")
+	# 模拟抓到非目标表面
+	cat.grabbed_surface_id = "other_plat"
+	planner.update(0.016)
+	assert(planner.current_phase == AutonomousJumpPlannerClass.TraversalPhase.IDLE, "抓住非目标表面时规划器应平稳退出原计划")
 	assert(planner.stats["partial_edge_grab"] >= 1, "partial_edge_grab 统计计数增加")
-	assert(cat.current_state == Cat.CatState.EDGE_HANG, "规划器绝不应破坏小猫当前的 EDGE_HANG 状态")
 	print("[PASS] 测试 60: T18 自主规划器与 EDGE_HANG 协同验证成功")
+
+	# ========== T20 Edge Climb-Up 单元测试 ==========
+	var ClimbTargetClass = load("res://scripts/world/climb_target.gd")
+
+	# 测试 61: ClimbTarget 数据结构与序列化
+	var ct = ClimbTargetClass.new("plat_test", -1, Vector2(200.0, 400.0), 220.0, 400.0, Vector2(194.0, 418.0), Vector2(194.0, 400.0), Vector2(220.0, 400.0), 1)
+	assert(ct.surface_id == "plat_test" and ct.edge_side == -1, "字段赋值正确")
+	assert(ct.get_landing_foot_position() == Vector2(220.0, 400.0), "落脚目标计算正确")
+	var ct_dict = ct.to_dict()
+	assert(ct_dict.edge_side == "LEFT" and ct_dict.target_foot_x == 220.0, "序列化正确")
+	print("[PASS] 测试 61: ClimbTarget 数据结构与序列化验证成功")
+
+	# 测试 62: Climb 可行性检查 (空间不足与遮挡拒绝)
+	surf_model.surfaces_by_id["plat_normal"] = s_test_plat
+	s_test_plat.x1 = 200.0; s_test_plat.x2 = 350.0; s_test_plat.y1 = 400.0; s_test_plat.y2 = 400.0
+	var s_narrow = SurfaceClass.new("plat_narrow", "wP", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 100.0, 400.0, 130.0, 400.0, true, true)
+	surf_model.surfaces_by_id["plat_narrow"] = s_narrow
+	cat.grabbed_edge = GrabbedEdgeClass.new("plat_narrow", -1, 100.0, 400.0)
+	cat.grabbed_surface_id = "plat_narrow"
+	cat.change_state(Cat.CatState.EDGE_HANG)
+	var feas_narrow = cat.check_climb_feasibility()
+	assert(feas_narrow.feasible == false and feas_narrow.reason == "NO_LANDING_SPACE", "平台过窄应拒绝攀爬")
+	# 增加上方低矮遮挡平台
+	var s_ceil = SurfaceClass.new("plat_ceil", "wP", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 180.0, 380.0, 250.0, 380.0, true, true)
+	surf_model.surfaces_by_id["plat_ceil"] = s_ceil
+	cat.grabbed_edge = GrabbedEdgeClass.new("plat_normal", -1, 200.0, 400.0)
+	cat.grabbed_surface_id = "plat_normal"
+	var feas_blocked = cat.check_climb_feasibility()
+	assert(feas_blocked.feasible == false and feas_blocked.reason == "CLEARANCE_BLOCKED", "落脚点上方受阻应拒绝攀爬")
+	surf_model.surfaces_by_id.erase("plat_ceil")
+	surf_model.surfaces_by_id.erase("plat_narrow")
+	print("[PASS] 测试 62: Climb 可行性检查 (空间与遮挡阻挡) 验证成功")
+
+	# 测试 63: 左端点攀爬 (LEFT Edge Climb-Up) 两段式运动与登顶完成
+	cat.current_mode = Cat.ControlMode.COMMAND
+	cat.position = Vector2(194.0, 418.0)
+	cat.direction = 1.0
+	cat.vertical_velocity = 0.0
+	cat.grabbed_edge = GrabbedEdgeClass.new("plat_normal", -1, 200.0, 400.0)
+	cat.grabbed_surface_id = "plat_normal"
+	cat.change_state(Cat.CatState.EDGE_HANG)
+	cmd_mgr.send_command(CommandManager.CatCommand.CLIMB_UP)
+	assert(cat.current_state == Cat.CatState.CLIMB_UP, "接收指令后应进入 CLIMB_UP 状态")
+	assert(cat.is_grounded == false, "攀爬期间 is_grounded 必须为 false")
+	assert(cat.current_climb_phase == Cat.ClimbPhase.PULL_UP, "起始阶段应为 PULL_UP")
+	cat.update_state(cat.climb_pull_up_duration + 0.01) # 推进过 PULL_UP
+	assert(cat.current_climb_phase == Cat.ClimbPhase.SHIFT_IN, "应平滑过渡至 SHIFT_IN 阶段")
+	cat.update_state(cat.climb_shift_in_duration + 0.01) # 推进过 SHIFT_IN
+	assert(cat.current_state == Cat.CatState.IDLE, "登顶后应平稳进入 IDLE")
+	assert(cat.is_grounded == true, "登顶后 is_grounded 必须为 true")
+	assert(cat.current_surface_id == "plat_normal", "成功站在目标平台上")
+	assert(absf(cat.position.y - (400.0 - cat.foot_offset.y)) < 0.1, "垂直落脚高度精确对齐")
+	print("[PASS] 测试 63: 左端点攀爬两段式运动与登顶完成验证成功")
+
+	# 测试 64: 右端点攀爬 (RIGHT Edge Climb-Up) 对称登顶验证
+	cat.current_mode = Cat.ControlMode.COMMAND
+	cat.position = Vector2(356.0, 418.0)
+	cat.direction = -1.0
+	cat.is_grounded = false
+	cat.grabbed_edge = GrabbedEdgeClass.new("plat_normal", 1, 350.0, 400.0)
+	cat.grabbed_surface_id = "plat_normal"
+	cat.change_state(Cat.CatState.EDGE_HANG)
+	cmd_mgr.send_command(CommandManager.CatCommand.CLIMB_UP)
+	assert(cat.current_state == Cat.CatState.CLIMB_UP, "应进入 CLIMB_UP")
+	assert(cat.direction == -1.0, "右侧攀爬应面向左")
+	cat.update_state(cat.climb_pull_up_duration + 0.02)
+	cat.update_state(cat.climb_shift_in_duration + 0.02)
+	assert(cat.current_state == Cat.CatState.IDLE, "右端点攀爬成功登顶")
+	assert(cat.current_surface_id == "plat_normal", "正确站立在目标平台")
+	assert(absf(cat.position.x - (350.0 - cat.climb_inward_margin - cat.foot_offset.x)) < 0.1, "右端点落脚 X 坐标对称对齐")
+	print("[PASS] 测试 64: 右端点攀爬对称登顶验证成功")
+
+	# 测试 65: 攀爬中表面消失与等价 Rebind 验证
+	cat.position = Vector2(194.0, 418.0)
+	cat.direction = 1.0
+	cat.is_grounded = false
+	cat.grabbed_edge = GrabbedEdgeClass.new("plat_normal", -1, 200.0, 400.0)
+	cat.grabbed_surface_id = "plat_normal"
+	cat.change_state(Cat.CatState.EDGE_HANG)
+	cat.start_climb()
+	assert(cat.current_state == Cat.CatState.CLIMB_UP, "成功进入攀爬")
+	# 模拟表面被替换为几何等价新表面
+	surf_model.surfaces_by_id.erase("plat_normal")
+	var s_re = SurfaceClass.new("plat_rebound2", "wP", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 201.0, 400.0, 350.0, 400.0, true, true)
+	surf_model.surfaces_by_id["plat_rebound2"] = s_re
+	cat.update_state(0.016)
+	assert(cat.current_state == Cat.CatState.CLIMB_UP and cat.grabbed_surface_id == "plat_rebound2", "攀爬中表面更新应成功 Rebind")
+	# 模拟新表面彻底消失
+	surf_model.surfaces_by_id.erase("plat_rebound2")
+	cat.update_state(0.016)
+	assert(cat.current_state == Cat.CatState.FALL, "无可用表面时应安全取消攀爬进入 FALL")
+	print("[PASS] 测试 65: 攀爬中表面消失与等价 Rebind 验证成功")
+
+	# 测试 66: 攀爬中平台位移跟随与超限脱落
+	surf_model.surfaces_by_id["plat_normal"] = s_test_plat
+	s_test_plat.x1 = 200.0; s_test_plat.x2 = 350.0; s_test_plat.y1 = 400.0; s_test_plat.y2 = 400.0
+	cat.position = Vector2(194.0, 418.0)
+	cat.grabbed_edge = GrabbedEdgeClass.new("plat_normal", -1, 200.0, 400.0)
+	cat.grabbed_surface_id = "plat_normal"
+	cat.change_state(Cat.CatState.EDGE_HANG)
+	cat.start_climb()
+	var pre_p := cat.position
+	# 模拟平台小幅平移 10px
+	s_test_plat.x1 += 10.0; s_test_plat.x2 += 10.0
+	cat.update_state(0.016)
+	assert(absf(cat.position.x - (pre_p.x + 10.0)) < 1.0, "攀爬中应动态跟随平台平移")
+	# 模拟平台大幅跳变 200px
+	s_test_plat.x1 += 200.0; s_test_plat.x2 += 200.0
+	cat.update_state(0.016)
+	assert(cat.current_state == Cat.CatState.FALL, "平台突变超限时应安全脱落")
+	# 还原测试平台坐标
+	s_test_plat.x1 = 200.0; s_test_plat.x2 = 350.0
+	print("[PASS] 测试 66: 攀爬中平台位移跟随与超限脱落验证成功")
+
+	# 测试 67: 用户 DRAG 拖拽瞬间中断攀爬
+	cat.position = Vector2(194.0, 418.0)
+	cat.grabbed_edge = GrabbedEdgeClass.new("plat_normal", -1, 200.0, 400.0)
+	cat.grabbed_surface_id = "plat_normal"
+	cat.change_state(Cat.CatState.EDGE_HANG)
+	cat.start_climb()
+	assert(cat.current_state == Cat.CatState.CLIMB_UP, "进入攀爬状态")
+	cmd_mgr.send_command(CommandManager.CatCommand.DRAG_START, { "mouse_pos": cat.position })
+	assert(cat.current_state == Cat.CatState.DRAG, "DRAG 拥有最高优先级，应瞬间中断攀爬")
+	assert(cat.current_climb_target == null and cat.grabbed_edge == null, "攀爬与抓边数据均已清除")
+	cmd_mgr.send_command(CommandManager.CatCommand.DRAG_END, { "throw_velocity": Vector2.ZERO })
+	print("[PASS] 测试 67: 用户 DRAG 拖拽瞬间中断攀爬验证成功")
+
+	# 测试 68: RELEASE_EDGE 指令 (按键 G) 在攀爬中立即脱手下落
+	cat.position = Vector2(194.0, 418.0)
+	cat.grabbed_edge = GrabbedEdgeClass.new("plat_normal", -1, 200.0, 400.0)
+	cat.grabbed_surface_id = "plat_normal"
+	cat.change_state(Cat.CatState.EDGE_HANG)
+	cat.start_climb()
+	assert(cat.current_state == Cat.CatState.CLIMB_UP, "进入攀爬状态")
+	cmd_mgr.send_command(CommandManager.CatCommand.RELEASE_EDGE)
+	assert(cat.current_state == Cat.CatState.FALL, "RELEASE_EDGE 应立即取消攀爬进入 FALL")
+	assert(cat.current_climb_target == null, "攀爬数据已清空")
+	print("[PASS] 测试 68: RELEASE_EDGE 指令在攀爬中立即脱手下落验证成功")
+
+	# 测试 69: AUTO 模式反应延迟与自动翻越闭环
+	cat.current_mode = Cat.ControlMode.AUTO
+	cat.position = Vector2(194.0, 418.0)
+	cat.direction = 1.0
+	cat.grabbed_edge = GrabbedEdgeClass.new("plat_normal", -1, 200.0, 400.0)
+	cat.grabbed_surface_id = "plat_normal"
+	cat.change_state(Cat.CatState.EDGE_HANG)
+	cat.auto_climb_pause_timer = 0.0
+	cat.update_state(0.1) # 停顿阶段
+	assert(cat.current_state == Cat.CatState.EDGE_HANG, "反应停顿期间保持 EDGE_HANG")
+	cat.update_state(cat.auto_climb_reaction_delay + 0.05) # 超过停顿时间
+	assert(cat.current_state == Cat.CatState.CLIMB_UP, "反应延迟到达后应自动进入 CLIMB_UP")
+	cat.update_state(cat.climb_pull_up_duration + 0.02)
+	cat.update_state(cat.climb_shift_in_duration + 0.02)
+	assert(cat.current_state == Cat.CatState.IDLE, "自动攀爬完成登顶进入 IDLE")
+	assert(cat.is_grounded == true and cat.current_surface_id == "plat_normal", "成功站在平台上")
+	print("[PASS] 测试 69: AUTO 模式反应延迟与自动翻越闭环验证成功")
+
+	# 测试 70: T18 自主规划器与 Edge Climb 成功闭环 (Recovery Success)
+	surf_model.surfaces_by_id["Top"] = s_top
+	surf_model.surfaces_by_id["Mid"] = s_mid
+	cat.current_surface_id = "Top"
+	cat.is_grounded = true
+	cat.current_mode = Cat.ControlMode.AUTO
+	cat.change_state(Cat.CatState.WALK)
+	planner.cooldown_timer = 0.0
+	assert(planner.try_plan_traversal() == true, "自主规划成功")
+	planner.current_phase = AutonomousJumpPlannerClass.TraversalPhase.AIRBORNE
+	cat.is_grounded = false
+	cat.grabbed_surface_id = planner.current_plan.target_surface_id
+	cat.change_state(Cat.CatState.EDGE_HANG)
+	planner.update(0.016)
+	assert(planner.current_phase == AutonomousJumpPlannerClass.TraversalPhase.AIRBORNE, "抓住目标边缘时规划器应挂起等待")
+	# 模拟小猫翻越成功
+	cat.climb_completed.emit(planner.current_plan.target_surface_id)
+	assert(planner.current_phase == AutonomousJumpPlannerClass.TraversalPhase.IDLE, "小猫登顶后规划器完成结算")
+	assert(planner.stats["edge_grab_recovery_success"] >= 1, "edge_grab_recovery_success 计数增加")
+	print("[PASS] 测试 70: T18 自主规划器与 Edge Climb 闭环验证成功")
 
 	fusion_builder.queue_free()
 	vis_model.queue_free()
@@ -805,7 +985,7 @@ func _init() -> void:
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
 	planner.queue_free()
-	print("========== T19 Edge Grab 单元测试全部通过 (共60项测试) ==========")
+	print("========== T20 Edge Climb-Up 单元测试全部通过 (共70项测试) ==========")
 	quit(0)
 
 

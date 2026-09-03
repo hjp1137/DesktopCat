@@ -15,10 +15,13 @@ func _init() -> void:
 	_pack_dir(packer, "res://scenes")
 	_pack_dir(packer, "res://scripts")
 	_pack_dir(packer, "res://assets")
-	_pack_dir(packer, "res://.godot")
+	if DirAccess.dir_exists_absolute("res://.godot/imported"):
+		_pack_dir(packer, "res://.godot/imported")
 	
 	packer.flush()
 	print("[Build] 打包完成: build/DesktopCat.pck")
+	DirAccess.copy_absolute("build/DesktopCat.pck", "build/DesktopCat_Standalone.pck")
+	print("[Build] 已同步至: build/DesktopCat_Standalone.pck")
 	quit(0)
 
 func _pack_file(packer: PCKPacker, path: String) -> void:

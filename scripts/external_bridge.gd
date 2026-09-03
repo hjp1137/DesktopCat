@@ -23,7 +23,9 @@ const ALLOWED_COMMANDS: Dictionary = {
 	"MOVE_TO_POSITION": CommandManager.CatCommand.MOVE_TO_POSITION,
 	"CLEAR_TARGET": CommandManager.CatCommand.CLEAR_TARGET,
 	"RELEASE_EDGE": CommandManager.CatCommand.RELEASE_EDGE,
-	"DROP_FROM_EDGE": CommandManager.CatCommand.RELEASE_EDGE
+	"DROP_FROM_EDGE": CommandManager.CatCommand.RELEASE_EDGE,
+	"CLIMB_UP": CommandManager.CatCommand.CLIMB_UP,
+	"EDGE_CLIMB": CommandManager.CatCommand.CLIMB_UP
 }
 
 var port: int = DEFAULT_PORT
@@ -282,6 +284,11 @@ func _handle_command_message(data: Dictionary) -> void:
 	if cmd_name in ["TOGGLE_DEBUG_EDGE_GRAB", "TOGGLE_DEBUG_EDGE"]:
 		if is_instance_valid(cat) and cat.has_method("toggle_edge_grab_debug"):
 			cat.toggle_edge_grab_debug()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
+		return
+	if cmd_name in ["TOGGLE_DEBUG_CLIMB", "TOGGLE_DEBUG_CLIMB_UP"]:
+		if is_instance_valid(cat) and cat.has_method("toggle_climb_debug"):
+			cat.toggle_climb_debug()
 		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
 		return
 

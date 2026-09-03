@@ -40,7 +40,7 @@ var debug_draw_enabled: bool = false
 var stats: Dictionary = {
 	"plans_started": 0, "success": 0, "failed": 0, "cancelled": 0,
 	"walk_jump_success": 0, "run_jump_success": 0, "drop_success": 0,
-	"partial_edge_grab": 0
+	"partial_edge_grab": 0, "edge_grab_recovery_success": 0
 }
 
 func _init(p_cat: Node2D = null, p_cmd: Node = null, p_graph: RefCounted = null, p_world: Node2D = null) -> void:
@@ -49,10 +49,19 @@ func _init(p_cat: Node2D = null, p_cmd: Node = null, p_graph: RefCounted = null,
 	platform_navigation_graph = p_graph
 	surface_world_model = p_world
 	last_world_change_time = 0
+	if is_instance_valid(cat):
+		_connect_cat_signals()
 
+func _connect_cat_signals() -> void:
+	if not is_instance_valid(cat): return
+	if cat.has_signal("climb_completed") and not cat.climb_completed.is_connected(_on_cat_climb_completed):
+		cat.climb_completed.connect(_on_cat_climb_completed)
+	if cat.has_signal("climb_failed") and not cat.climb_failed.is_connected(_on_cat_climb_failed):
+		cat.climb_failed.connect(_on_cat_climb_failed)
 
 func _ready() -> void:
 	set_process(true)
+	_connect_cat_signals()
 
 func _process(delta: float) -> void:
 	update(delta)
@@ -259,20 +268,39 @@ func _update_airborne(delta: float) -> void:
 	if current_plan == null: cancel_plan("NO_PLAN"); return
 	current_plan.elapsed_airborne += delta
 
-	if int(cat.current_state) == 8: # Cat.CatState.EDGE_HANG
+	if int(cat.current_state) in [8, 9]: # Cat.CatState.EDGE_HANG 或 CLIMB_UP
 		var grabbed_id: String = str(cat.grabbed_surface_id) if "grabbed_surface_id" in cat else ""
-		stats["partial_edge_grab"] = int(stats.get("partial_edge_grab", 0)) + 1
-		print("[Planner] Traversal SUSPENDED_ON_EDGE: Cat grabbed edge of %s (target=%s)" % [grabbed_id, current_plan.target_surface_id])
-		cooldown_timer = randf_range(3.0, 6.0)
-		current_phase = TraversalPhase.IDLE
-		current_plan = null
-		return
+		if grabbed_id == current_plan.target_surface_id:
+			# 挂起等待小猫攀爬翻上目标平台，重置滞空超时计时
+			current_plan.elapsed_airborne = 0.0
+			return
+		else:
+			stats["partial_edge_grab"] = int(stats.get("partial_edge_grab", 0)) + 1
+			print("[Planner] Traversal SUSPENDED_ON_EDGE: Cat grabbed different edge of %s (target=%s)" % [grabbed_id, current_plan.target_surface_id])
+			cooldown_timer = randf_range(3.0, 6.0)
+			current_phase = TraversalPhase.IDLE
+			current_plan = null
+			return
 
 	if current_plan.elapsed_airborne > float(current_plan.timeout):
 		fail_plan("AIRBORNE_TIMEOUT"); return
 
 	if bool(cat.is_grounded):
 		current_phase = TraversalPhase.VERIFY_LANDING
+
+func _on_cat_climb_completed(surface_id: String) -> void:
+	if current_phase == TraversalPhase.AIRBORNE and current_plan != null:
+		if surface_id == current_plan.target_surface_id:
+			stats["edge_grab_recovery_success"] = int(stats.get("edge_grab_recovery_success", 0)) + 1
+			print("[Planner] Target edge climbed successfully! Recovery success -> %s" % surface_id)
+			complete_plan_success()
+		else:
+			print("[Planner] Climbed different surface %s (expected %s)" % [surface_id, current_plan.target_surface_id])
+			fail_plan("MISSED_TARGET")
+
+func _on_cat_climb_failed(reason: String) -> void:
+	if current_phase == TraversalPhase.AIRBORNE and current_plan != null:
+		fail_plan("CLIMB_FAILED_" + reason)
 
 func _update_verify_landing(_delta: float) -> void:
 	if current_plan == null: cancel_plan("NO_PLAN"); return

@@ -2,9 +2,14 @@ class_name Cat
 extends Node2D
 
 enum ControlMode { AUTO, COMMAND }
-enum CatState { IDLE, WALK, RUN, SIT, SLEEP, JUMP, FALL, DRAG, EDGE_HANG }
+enum CatState { IDLE, WALK, RUN, SIT, SLEEP, JUMP, FALL, DRAG, EDGE_HANG, CLIMB_UP }
+enum ClimbPhase { NONE, PULL_UP, SHIFT_IN, SETTLE }
+
+signal climb_completed(surface_id: String)
+signal climb_failed(reason: String)
 
 const GrabbedEdgeClass = preload("res://scripts/world/grabbed_edge.gd")
+const ClimbTargetClass = preload("res://scripts/world/climb_target.gd")
 
 @export var walk_speed: float = 120.0
 @export var run_speed: float = 220.0
@@ -23,6 +28,27 @@ const GrabbedEdgeClass = preload("res://scripts/world/grabbed_edge.gd")
 @export var max_edge_hang_safety_time: float = 60.0
 @export var grab_point_offset_x: float = 12.0
 @export var grab_point_offset_y: float = -20.0
+
+@export var climb_inward_margin: float = 20.0
+@export var min_climb_up_platform_length: float = 48.0
+@export var climb_pull_up_duration: float = 0.30
+@export var climb_shift_in_duration: float = 0.25
+@export var climb_clearance_margin: float = 4.0
+@export var max_climb_target_delta: float = 150.0
+@export var climb_up_timeout: float = 2.0
+@export var auto_climb_reaction_delay: float = 0.5
+@export var climb_cooldown_time: float = 1.5
+
+var current_climb_phase: ClimbPhase = ClimbPhase.NONE
+var current_climb_target: RefCounted = null
+var climb_phase_timer: float = 0.0
+var climb_total_timer: float = 0.0
+var climb_cooldown: float = 0.0
+var auto_climb_pause_timer: float = 0.0
+var climb_debug_enabled: bool = false
+var climb_stats: Dictionary = {
+	"climb_attempts": 0, "climb_success": 0, "climb_cancelled": 0
+}
 
 var current_mode: ControlMode = ControlMode.AUTO
 var current_state: CatState = CatState.WALK
@@ -84,6 +110,12 @@ func toggle_edge_grab_debug() -> bool:
 	queue_redraw()
 	return edge_grab_debug_enabled
 
+func toggle_climb_debug() -> bool:
+	climb_debug_enabled = not climb_debug_enabled
+	print("[Climb] Debug View: %s" % ("ON" if climb_debug_enabled else "OFF"))
+	queue_redraw()
+	return climb_debug_enabled
+
 func get_current_surface_id() -> String:
 	return current_surface_id
 
@@ -142,8 +174,13 @@ func enter_state(state: CatState) -> void:
 	print("[Cat] [%s] 进入状态: %s, 朝向: %s, Y=%.1f" % ["AUTO" if current_mode == ControlMode.AUTO else "COMMAND", CatState.keys()[state], "左" if direction < 0.0 else "右", position.y])
 
 func update_state(delta: float) -> void:
+	if climb_cooldown > 0.0:
+		climb_cooldown -= delta
 	sleep_cooldown = maxf(0.0, sleep_cooldown - delta); run_cooldown = maxf(0.0, run_cooldown - delta)
 	if current_state == CatState.DRAG: return
+	if current_state == CatState.CLIMB_UP:
+		_update_climb(delta)
+		return
 	if current_state == CatState.EDGE_HANG:
 		_update_edge_hang(delta)
 		return
@@ -375,6 +412,7 @@ func _grab_edge(cand: Dictionary) -> void:
 
 	if current_mode == ControlMode.AUTO:
 		auto_edge_hang_timer = randf_range(auto_edge_hang_duration_min, auto_edge_hang_duration_max)
+		auto_climb_pause_timer = 0.0
 	else:
 		auto_edge_hang_timer = max_edge_hang_safety_time
 
@@ -420,6 +458,10 @@ func _update_edge_hang(delta: float) -> void:
 			return
 
 	if current_mode == ControlMode.AUTO:
+		auto_climb_pause_timer += delta
+		if auto_climb_pause_timer >= auto_climb_reaction_delay:
+			if start_climb():
+				return
 		auto_edge_hang_timer -= delta
 		if auto_edge_hang_timer <= 0.0:
 			print("[EdgeGrab] AUTO hang duration ended, releasing")
@@ -442,7 +484,164 @@ func release_edge() -> void:
 	change_state(CatState.FALL)
 	print("[EdgeGrab] Released")
 
+func check_climb_feasibility() -> Dictionary:
+	if grabbed_edge == null or grabbed_surface_id == "":
+		return { "feasible": false, "reason": "NO_GRABBED_EDGE" }
+	if not is_instance_valid(surface_world_model):
+		return { "feasible": false, "reason": "NO_SURFACE_MODEL" }
+	var s = surface_world_model.get_surface_by_id(grabbed_surface_id)
+	if s == null or not s.walkable:
+		return { "feasible": false, "reason": "SURFACE_LOST" }
+	var surf_len: float = absf(s.x2 - s.x1)
+	if surf_len < min_climb_up_platform_length:
+		return { "feasible": false, "reason": "NO_LANDING_SPACE" }
+	var target_foot_x: float = (minf(s.x1, s.x2) + climb_inward_margin) if grabbed_edge.edge_side == -1 else (maxf(s.x1, s.x2) - climb_inward_margin)
+	var target_foot_y: float = s.y1
+	# 检查上方 clearance
+	var chk_box := Rect2(target_foot_x - 18.0 - climb_clearance_margin, target_foot_y - 36.0 - climb_clearance_margin, 36.0 + climb_clearance_margin * 2.0, 34.0)
+	for other_s in surface_world_model.surfaces_by_id.values():
+		if other_s.id == s.id: continue
+		if other_s.surface_type == 0 and other_s.orientation == 0:
+			var oy: float = other_s.y1
+			if oy < target_foot_y and oy >= target_foot_y - 36.0:
+				var ox_min: float = minf(other_s.x1, other_s.x2)
+				var ox_max: float = maxf(other_s.x1, other_s.x2)
+				if ox_max > chk_box.position.x and ox_min < chk_box.end.x:
+					return { "feasible": false, "reason": "CLEARANCE_BLOCKED" }
+	return { "feasible": true, "surface": s, "target_foot_x": target_foot_x, "target_foot_y": target_foot_y }
+
+func start_climb() -> bool:
+	if current_state == CatState.CLIMB_UP: return true
+	if current_state != CatState.EDGE_HANG: return false
+	var feas := check_climb_feasibility()
+	if not feas.feasible:
+		print("[Climb] Cannot climb: %s" % feas.reason)
+		return false
+	var s = feas.surface
+	var target_pos := Vector2(float(feas.target_foot_x) - foot_offset.x, float(feas.target_foot_y) - foot_offset.y)
+	var start_pos := position
+	var pull_up_pos := Vector2(start_pos.x, target_pos.y)
+	current_climb_target = ClimbTargetClass.new(
+		s.id, grabbed_edge.edge_side, grabbed_edge.get_edge_position(),
+		float(feas.target_foot_x), float(feas.target_foot_y),
+		start_pos, pull_up_pos, target_pos,
+		surface_world_model.world_revision if "world_revision" in surface_world_model else 0
+	)
+	current_climb_phase = ClimbPhase.PULL_UP
+	climb_phase_timer = 0.0
+	climb_total_timer = 0.0
+	vertical_velocity = 0.0
+	horizontal_throw_speed = 0.0
+	is_grounded = false
+	current_surface_id = ""
+	current_surface = null
+	climb_stats["climb_attempts"] = int(climb_stats["climb_attempts"]) + 1
+	change_state(CatState.CLIMB_UP)
+	print("[Climb] Start surface=%s side=%s" % [s.id, "LEFT" if grabbed_edge.edge_side == -1 else "RIGHT"])
+	return true
+
+func cancel_climb(reason: String) -> void:
+	if current_state != CatState.CLIMB_UP and current_climb_phase == ClimbPhase.NONE: return
+	climb_stats["climb_cancelled"] = int(climb_stats["climb_cancelled"]) + 1
+	print("[Climb] Failed: %s -> FALL" % reason)
+	climb_failed.emit(reason)
+	current_climb_target = null
+	current_climb_phase = ClimbPhase.NONE
+	grabbed_edge = null
+	grabbed_surface_id = ""
+	is_grounded = false
+	current_surface_id = ""
+	current_surface = null
+	vertical_velocity = 0.0
+	horizontal_throw_speed = 0.0
+	var sg = surface_world_model.get_surface_by_id("screen:ground") if is_instance_valid(surface_world_model) else null
+	ground_y = sg.y1 if sg != null else (_get_viewport_size().y - 48.0)
+	change_state(CatState.FALL)
+
+func _update_climb(delta: float) -> void:
+	vertical_velocity = 0.0
+	horizontal_throw_speed = 0.0
+	is_grounded = false
+	if current_climb_target == null or grabbed_surface_id == "":
+		cancel_climb("NO_CLIMB_TARGET")
+		return
+	climb_total_timer += delta
+	if climb_total_timer > climb_up_timeout:
+		cancel_climb("TIMEOUT")
+		return
+	if not is_instance_valid(surface_world_model):
+		return
+	var s = surface_world_model.get_surface_by_id(grabbed_surface_id)
+	if s == null:
+		var re_edge: Dictionary = surface_world_model.find_equivalent_edge_near(current_climb_target.edge_position, current_climb_target.edge_side, 16.0)
+		if not re_edge.is_empty():
+			grabbed_surface_id = str(re_edge.surface_id)
+			current_climb_target.surface_id = grabbed_surface_id
+			s = surface_world_model.get_surface_by_id(grabbed_surface_id)
+		else:
+			cancel_climb("SURFACE_LOST")
+			return
+	# 动态位移校准
+	var cur_edge_pos: Vector2 = Vector2(minf(s.x1, s.x2), s.y1) if current_climb_target.edge_side == -1 else Vector2(maxf(s.x1, s.x2), s.y1)
+	var delta_edge: Vector2 = cur_edge_pos - current_climb_target.edge_position
+	if delta_edge.length() > max_climb_target_delta:
+		cancel_climb("TARGET_MOVED_TOO_FAR")
+		return
+	elif delta_edge != Vector2.ZERO:
+		current_climb_target.edge_position = cur_edge_pos
+		current_climb_target.start_position += delta_edge
+		current_climb_target.pull_up_position += delta_edge
+		current_climb_target.target_position += delta_edge
+		position += delta_edge
+
+	climb_phase_timer += delta
+	if current_climb_phase == ClimbPhase.PULL_UP:
+		var t := clampf(climb_phase_timer / climb_pull_up_duration, 0.0, 1.0)
+		var smooth_t := t * t * (3.0 - 2.0 * t)
+		position = current_climb_target.start_position.lerp(current_climb_target.pull_up_position, smooth_t)
+		if t >= 1.0:
+			current_climb_phase = ClimbPhase.SHIFT_IN
+			climb_phase_timer = 0.0
+			print("[Climb] Phase SHIFT_IN")
+	elif current_climb_phase == ClimbPhase.SHIFT_IN:
+		var t := clampf(climb_phase_timer / climb_shift_in_duration, 0.0, 1.0)
+		var smooth_t := t * t * (3.0 - 2.0 * t)
+		position = current_climb_target.pull_up_position.lerp(current_climb_target.target_position, smooth_t)
+		if t >= 1.0:
+			current_climb_phase = ClimbPhase.SETTLE
+			complete_climb()
+
+func complete_climb() -> void:
+	if current_climb_target == null: return
+	position = current_climb_target.target_position
+	var s = surface_world_model.get_surface_by_id(grabbed_surface_id) if is_instance_valid(surface_world_model) else null
+	if s == null or not s.walkable:
+		cancel_climb("SURFACE_LOST")
+		return
+	var finished_id := grabbed_surface_id
+	current_surface_id = s.id
+	current_surface = s
+	ground_y = s.y1
+	is_grounded = true
+	vertical_velocity = 0.0
+	horizontal_throw_speed = 0.0
+	grabbed_edge = null
+	grabbed_surface_id = ""
+	current_climb_target = null
+	current_climb_phase = ClimbPhase.NONE
+	climb_cooldown = climb_cooldown_time
+	climb_stats["climb_success"] = int(climb_stats["climb_success"]) + 1
+	print("[Climb] Completed on %s" % finished_id)
+	climb_completed.emit(finished_id)
+	state_timer = 0.5
+	if current_mode == ControlMode.COMMAND:
+		command_ground_state = CatState.IDLE
+	change_state(CatState.IDLE)
+
 func on_surface_world_updated(_rev: int = 0) -> void:
+	if current_state == CatState.CLIMB_UP:
+		_update_climb(0.0)
+		return
 	if current_state == CatState.EDGE_HANG:
 		_update_edge_hang(0.0)
 		return
@@ -472,8 +671,19 @@ func on_surface_world_updated(_rev: int = 0) -> void:
 
 func handle_command(command: int, payload: Dictionary = {}) -> void:
 	if current_state == CatState.DRAG and command < 5: print("[Cat] DRAG 期间忽略指令"); return
-	if current_state == CatState.EDGE_HANG:
+	if current_state == CatState.CLIMB_UP:
 		if command == 16: # RELEASE_EDGE
+			cancel_climb("USER_RELEASED")
+			return
+		elif command == 5: # DRAG_START
+			cancel_climb("DRAG_INTERRUPTED")
+		elif command in [0, 1, 2, 4, 8, 9, 10, 11, 12, 14, 17]:
+			return
+	if current_state == CatState.EDGE_HANG:
+		if command == 17: # CLIMB_UP
+			start_climb()
+			return
+		elif command == 16: # RELEASE_EDGE
 			release_edge()
 			return
 		elif command == 5: # DRAG_START
@@ -553,7 +763,7 @@ func _move_and_bounce(delta: float, cur_speed: float) -> void:
 
 func _on_clicked() -> void:
 	print("Cat clicked!")
-	if current_state != CatState.EDGE_HANG:
+	if current_state != CatState.EDGE_HANG and current_state != CatState.CLIMB_UP:
 		var sprite := _get_animated_sprite()
 		if sprite: var tw := create_tween(); tw.tween_property(sprite, "position:y", -16.0, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT); tw.tween_property(sprite, "position:y", 0.0, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	var main_p := get_parent()
@@ -597,4 +807,22 @@ func _draw() -> void:
 			draw_line(Vector2.ZERO, pe, Color(1.0, 0.1, 0.6, 0.8), 2.0)
 		var eg_info := "[F16 EdgeGrab] State: %s | Edge: %s (%s) | Success: %d" % [CatState.keys()[current_state], grabbed_surface_id if grabbed_surface_id != "" else "NONE", grabbed_edge.get_side_name() if grabbed_edge else "-", int(edge_grab_stats["grab_success"])]
 		draw_string(ThemeDB.fallback_font, Vector2(-60.0, -52.0), eg_info, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.1, 1.0, 0.8, 0.95))
+
+	if climb_debug_enabled:
+		if current_climb_target != null:
+			var p_start := to_local(current_climb_target.start_position)
+			var p_pull := to_local(current_climb_target.pull_up_position)
+			var p_end := to_local(current_climb_target.target_position)
+			draw_circle(p_start, 5.0, Color(0.3, 0.8, 1.0, 0.9))
+			draw_circle(p_pull, 5.0, Color(1.0, 0.8, 0.2, 0.9))
+			draw_circle(p_end, 5.0, Color(0.2, 1.0, 0.4, 0.9))
+			draw_line(p_start, p_pull, Color(0.2, 0.9, 1.0, 0.8), 2.5)
+			draw_line(p_pull, p_end, Color(0.2, 1.0, 0.5, 0.8), 2.5)
+			# 绘制 Clearance 检查框
+			var foot_land := to_local(current_climb_target.get_landing_foot_position())
+			var c_box := Rect2(foot_land.x - 18.0 - climb_clearance_margin, foot_land.y - 36.0 - climb_clearance_margin, 36.0 + climb_clearance_margin * 2.0, 34.0)
+			draw_rect(c_box, Color(1.0, 0.5, 0.2, 0.35), false, 1.5)
+		var phase_name: String = ["NONE", "PULL_UP", "SHIFT_IN", "SETTLE"][current_climb_phase]
+		var cl_info := "[F17 Climb] Phase: %s | Target: %s | Success: %d" % [phase_name, grabbed_surface_id if grabbed_surface_id != "" else "NONE", int(climb_stats["climb_success"])]
+		draw_string(ThemeDB.fallback_font, Vector2(-60.0, -66.0), cl_info, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.3, 1.0, 0.5, 0.95))
 
