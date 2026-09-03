@@ -43,12 +43,12 @@ func _process(delta: float) -> bool:
 
 	elif step_idx == 3 and elapsed_time > 1.3:
 		step_idx = 4
-		print("========== 阶段 4: 验证 WindowWorldModel、SurfaceWorldModel、UIElementWorldModel 与 VisualWorldModel 同步 ==========")
+		print("========== 阶段 4: 验证 Unified SurfaceWorldModel 包含三路感知统一表面 ==========")
 		assert(main_scene.surface_world_model.surfaces_by_id.has("0x30094:top"), "SurfaceWorldModel 应生成 0x30094:top")
 		assert(main_scene.surface_world_model.surfaces_by_id.has("screen:ground"), "SurfaceWorldModel 应生成 screen:ground")
-		assert(main_scene.ui_element_world_model.elements_by_id.has("0x30094:btn1"), "UIElementWorldModel 应生成 0x30094:btn1")
-		assert(main_scene.visual_world_model.geometries_by_id.has("vg_lh_1"), "VisualWorldModel 应生成 vg_lh_1")
-		print("========== 阶段 4b: 触发 F8、F9、F10、F11 与 F12 切换 Debug 绘制 ==========")
+		assert(main_scene.surface_world_model.surfaces_by_id.has("uia:0x30094:btn1:top"), "SurfaceWorldModel 应生成 uia:0x30094:btn1:top")
+		assert(main_scene.surface_world_model.surfaces_by_id.has("vg:vg_lh_1"), "SurfaceWorldModel 应生成 vg:vg_lh_1")
+		print("========== 阶段 4b: 触发 F8、F9、F10、F11、F12 与 F13(H) 切换 Debug 绘制 ==========")
 		var ev_f8 := InputEventKey.new(); ev_f8.keycode = KEY_F8; ev_f8.pressed = true
 		main_scene._input(ev_f8)
 		assert(main_scene.window_world_model.debug_draw_enabled == true, "F8 应成功开启 Window Debug")
@@ -64,20 +64,23 @@ func _process(delta: float) -> bool:
 		var ev_f12 := InputEventKey.new(); ev_f12.keycode = KEY_F12; ev_f12.pressed = true
 		main_scene._input(ev_f12)
 		assert(main_scene.visual_world_model.debug_draw_enabled == true, "F12 应成功开启 Visual Debug")
+		var ev_f13 := InputEventKey.new(); ev_f13.keycode = KEY_H; ev_f13.pressed = true
+		main_scene._input(ev_f13)
+		assert(main_scene.surface_fusion_builder.debug_diagnostics_enabled == true, "F13/H 应成功开启 Fusion Diagnostics")
 
 		print("========== 阶段 4c: 验证小猫下落着陆到 Chrome 顶边 ==========")
 		main_scene.cat.position = Vector2(400.0, 100.0)
 		main_scene.cat.vertical_velocity = 800.0
-
-
 		main_scene.cat.is_grounded = false
 		main_scene.cat.change_state(Cat.CatState.FALL)
+
 
 	elif step_idx == 4 and elapsed_time > 1.7:
 		step_idx = 5
 		assert(main_scene.cat.is_grounded == true, "小猫下落后应当着陆")
 		assert(main_scene.cat.current_surface_id == "0x30094:top", "应当着陆在 Chrome 顶边 0x30094:top")
-		assert(absf(main_scene.cat.position.y - 150.0) < 0.5, "着陆点 Y 坐标应与 Chrome 顶边 150 一致")
+		assert(absf(main_scene.cat.position.y - 150.0) <= 4.0, "着陆点 Y 坐标应在 Chrome 顶边 4px 量化容差范围内")
+
 		print("========== 阶段 5: 断开连接 ==========")
 		tcp_client.disconnect_from_host()
 		tcp_client = null

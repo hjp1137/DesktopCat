@@ -25,32 +25,33 @@
 - **物理调试渲染 (F10)**：红点显示脚底接触点，高亮当前站立表面与状态 HUD；
 - **未实现项说明**：T13 尚未包含自主跳跃规划、抓边攀爬或路径寻路（由 T14~T17 实现）。
 
+### T14~T16：UI Automation、视觉几何与统一表面融合
+- **T14**：纯原生 Windows UI Automation COM 感知，提取 Text/Button/Edit/Image 等结构化 UI 几何，支持 `F11` 调试；
+- **T15**：原生 GDI 轻量视觉几何感知，0.25 降采样与均值指纹变化检测，提取横线、竖线与矩形，支持 `F12` 调试；
+- **T16**：**统一表面融合系统 (Unified Surface Fusion & Simplification)**：
+  - 建立 `SurfaceFusionBuilder`，将 Window、UIA 与 Visual 几何统一提取为标准 `SurfaceCandidate`；
+  - 实施优先级矩阵（Screen 100 > Window 90 > UIA 80 > Visual 60），自动过滤容器，合并同行文本片段，裁剪高 Z 窗口遮挡；
+  - 80% 重叠去重并外扩并集，近共线合并，4px 网格坐标量化与 600ms 丢失 Grace 缓冲；
+  - 原子提交至唯一 `SurfaceWorldModel`，使小猫天然在窗口文本、按钮、输入框、图片与视觉线条上行走与着陆！
+
 ## 运行方式与快捷键
 
 ### 1. 运行桌面宠物
 - 独立版运行：`D:\projects\godot\DesktopCat\build\DesktopCat_Standalone.exe`
 - 快捷键操作：
   - `F8` / `-` / `V`：切换【窗口矩形】调试线框
-  - `F9` / `=` / `B`：切换【Surface 物理表面】调试线框
+  - `F9` / `=` / `B`：切换【Surface 物理表面】调试线框（含融合后的全部表面）
   - `F10` / `N` / `M`：切换【Cat 物理接触点与站立表面】高亮
   - `F11` / `K` / `O` / `U`：切换【UI Automation 控件几何】调试线框
+  - `F12` / `J`：切换【Visual Geometry 视觉几何】调试线框
+  - `F13` / `H` / `Y`：切换【Unified Surface Fusion 融合诊断】HUD 视图
   - `TAB`：切换多显示器并重新生成表面与清理UI缓存
   - `C`：切换指针好奇跟随模式
   - `ESC` / `Alt + F4`：安全退出
 
 ### 2. 启动 Windows 感知服务
-- **窗口几何感知服务** (10Hz)：
-  ```bash
-  python tools/perception/window_perception.py
-  ```
-- **UI Automation 控件感知服务** (2Hz，零第三方依赖)：
-  ```bash
-  python tools/perception/ui_automation_perception.py
-  ```
 - **统一多 Provider 感知调度器 (Window + UIA + Visual)**：
   ```bash
   python tools/perception/perception_service.py
   ```
-按 `F8` 查看窗口，`F9` 查看物理表面，`F10` 查看小猫接触点，`F11` 查看 Windows 窗口内部 UI 控件几何，按 `F12`（或免Fn键 `J`）查看纯视觉几何线框（水平线暖橙、垂直线金黄、矩形紫红）！
-
-
+  在控制台或桌面全局按 `F8`~`F12` 或免 Fn 键 `H`/`Y` 查看实时表面融合诊断！

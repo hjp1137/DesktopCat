@@ -7,6 +7,7 @@ const WindowWorldModelClass = preload("res://scripts/world/window_world_model.gd
 const SurfaceWorldModelClass = preload("res://scripts/world/surface_world_model.gd")
 const UIElementWorldModelClass = preload("res://scripts/world/ui_element_world_model.gd")
 const VisualWorldModelClass = preload("res://scripts/world/visual_world_model.gd")
+const SurfaceFusionBuilderClass = preload("res://scripts/world/surface_fusion_builder.gd")
 
 @onready var cat: Node2D = $Cat
 var command_manager: CommandManager = null
@@ -17,9 +18,11 @@ var window_world_model: Node2D = null
 var surface_world_model: Node2D = null
 var ui_element_world_model: Node2D = null
 var visual_world_model: Node2D = null
+var surface_fusion_builder: Node2D = null
 var current_target_screen: int = 0
 
 func _ready() -> void:
+
 
 
 	print("[Main] DesktopCat 启动中...")
@@ -45,18 +48,29 @@ func _ready() -> void:
 	
 	surface_world_model = SurfaceWorldModelClass.new()
 	add_child(surface_world_model)
-	window_world_model.window_world_updated.connect(_on_window_world_updated)
 	if is_instance_valid(cat):
 		cat.set("surface_world_model", surface_world_model)
 		if cat.has_method("on_surface_world_updated"):
 			surface_world_model.surface_world_updated.connect(cat.on_surface_world_updated)
-	_on_window_world_updated(0)
 	
 	ui_element_world_model = UIElementWorldModelClass.new()
 	add_child(ui_element_world_model)
 	
 	visual_world_model = VisualWorldModelClass.new()
 	add_child(visual_world_model)
+
+	surface_fusion_builder = SurfaceFusionBuilderClass.new()
+	surface_fusion_builder.window_world_model = window_world_model
+	surface_fusion_builder.ui_element_world_model = ui_element_world_model
+	surface_fusion_builder.visual_world_model = visual_world_model
+	surface_fusion_builder.surface_world_model = surface_world_model
+	surface_fusion_builder.cat = cat
+	add_child(surface_fusion_builder)
+
+	window_world_model.window_world_updated.connect(func(_r): surface_fusion_builder.request_fusion())
+	ui_element_world_model.ui_world_updated.connect(func(_r): surface_fusion_builder.request_fusion())
+	visual_world_model.visual_world_updated.connect(func(_r): surface_fusion_builder.request_fusion())
+	_on_window_world_updated(0)
 	
 	external_bridge = ExternalBridgeClass.new()
 	external_bridge.set("command_manager", command_manager)
@@ -66,8 +80,10 @@ func _ready() -> void:
 	external_bridge.set("surface_world_model", surface_world_model)
 	external_bridge.set("ui_element_world_model", ui_element_world_model)
 	external_bridge.set("visual_world_model", visual_world_model)
+	external_bridge.set("surface_fusion_builder", surface_fusion_builder)
 
 	add_child(external_bridge)
+
 
 
 	
@@ -160,9 +176,10 @@ func _handle_key_event(event: InputEventKey) -> bool:
 			if visual_world_model and visual_world_model.has_method("toggle_debug_draw"):
 				visual_world_model.toggle_debug_draw()
 			return true
-
-
-
+		KEY_F13, KEY_H, KEY_Y:
+			if surface_fusion_builder and surface_fusion_builder.has_method("toggle_debug_diagnostics"):
+				surface_fusion_builder.toggle_debug_diagnostics()
+			return true
 
 		KEY_C: if mouse_perception_controller and mouse_perception_controller.has_method("toggle_debug_follow"): mouse_perception_controller.toggle_debug_follow(); return true
 		KEY_1: command_manager.send_command(CommandManager.CatCommand.STOP); return true
@@ -178,12 +195,9 @@ func _handle_key_event(event: InputEventKey) -> bool:
 	return false
 
 func _on_window_world_updated(_rev: int) -> void:
-	if not is_instance_valid(surface_world_model) or not is_instance_valid(window_world_model):
-		return
-	var win := get_window()
-	var ov_sz: Vector2 = Vector2(win.size) if win and win.size.x > 0 and win.size.y > 0 else Vector2(1920, 1080)
-	var gy: float = cat.ground_y if is_instance_valid(cat) and "ground_y" in cat and cat.ground_y > 0.0 else ov_sz.y - 48.0
-	surface_world_model.rebuild_from_windows(window_world_model.windows_by_id, ov_sz, gy)
+	if is_instance_valid(surface_fusion_builder):
+		surface_fusion_builder.execute_fusion()
+
 
 
 

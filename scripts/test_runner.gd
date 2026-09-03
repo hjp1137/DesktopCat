@@ -330,14 +330,101 @@ func _init() -> void:
 	assert(vis_model.debug_draw_enabled == false, "再次 toggle 后 Debug Draw 应关闭")
 	print("[PASS] 测试 27: F12 调试开关验证成功")
 
+	# ========== T16 Unified Surface Fusion 单元测试 ==========
+	var SurfaceClass = load("res://scripts/world/surface.gd")
+	var SurfaceCandidateClass = load("res://scripts/world/surface_candidate.gd")
+	var SurfaceFusionBuilderClass = load("res://scripts/world/surface_fusion_builder.gd")
+	var fusion_builder = SurfaceFusionBuilderClass.new()
+	fusion_builder.window_world_model = world_model
+	fusion_builder.ui_element_world_model = ui_model
+	fusion_builder.visual_world_model = vis_model
+	fusion_builder.surface_world_model = surf_model
+	fusion_builder.cat = cat
+	root.add_child(fusion_builder)
+
+	# 测试 28: UI 容器类型过滤 (Pane/Group/Document 过滤，Button/Text 保留)
+	var ui_test_data = {
+		"v": 1, "type": "ui_snapshot", "revision": 10,
+		"elements": [
+			{"id": "doc1", "control_type": "Document", "x": 100.0, "y": 100.0, "width": 800.0, "height": 600.0},
+			{"id": "pane1", "control_type": "Pane", "x": 120.0, "y": 120.0, "width": 700.0, "height": 500.0},
+			{"id": "btn1", "control_type": "Button", "x": 150.0, "y": 200.0, "width": 120.0, "height": 40.0}
+		]
+	}
+	ui_model.update_from_snapshot(ui_test_data)
+	var uia_cands = fusion_builder._extract_uia_candidates(ui_model.elements_by_id, {})
+	assert(uia_cands.size() == 1 and uia_cands[0].source_id == "btn1", "容器应被过滤，仅保留 Button 平台")
+	print("[PASS] 测试 28: UI 容器类型过滤验证成功")
+
+	# 测试 29: 文本片段同行自动合并
+	var text_merge_data = {
+		"v": 1, "type": "ui_snapshot", "revision": 11,
+		"elements": [
+			{"id": "t1", "window_id": "w1", "control_type": "Text", "x": 200.0, "y": 300.0, "width": 60.0, "height": 20.0},
+			{"id": "t2", "window_id": "w1", "control_type": "Text", "x": 265.0, "y": 301.0, "width": 80.0, "height": 20.0}
+		]
+	}
+	ui_model.update_from_snapshot(text_merge_data)
+	var text_cands = fusion_builder._extract_uia_candidates(ui_model.elements_by_id, {})
+	assert(text_cands.size() == 1, "同行近邻文本片段应合并为一个平台")
+	assert(text_cands[0].x1 <= 200.0 and text_cands[0].x2 >= 345.0, "文本平台应覆盖合并后区间")
+	print("[PASS] 测试 29: 文本片段同行自动合并验证成功")
+
+	# 测试 30: 跨 Provider 重叠去重 (UIA 优先于 Visual)
+	var cand_uia = SurfaceCandidateClass.new("uia:b1:top", "UIA", "b1", "Button", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 100.0, 400.0, 250.0, 400.0, true, true, 80)
+	var cand_vis = SurfaceCandidateClass.new("vg:line1", "VISUAL", "l1", "VisualLine", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 90.0, 401.0, 260.0, 401.0, true, true, 60)
+	var deduped = fusion_builder._deduplicate_platforms([cand_uia, cand_vis])
+	assert(deduped.size() == 1, "重叠平台应去重")
+	assert(deduped[0].source_type == "UIA", "应保留优先级更高的 UIA 来源")
+	assert(deduped[0].x1 <= 90.0 and deduped[0].x2 >= 260.0, "应扩展并集范围")
+	assert(deduped[0].source_aliases.has("vg:line1"), "应记录别名")
+	print("[PASS] 测试 30: 跨 Provider 重叠去重与范围扩展验证成功")
+
+	# 测试 31: 近共线线段合并
+	var l_a = SurfaceCandidateClass.new("l_a", "VISUAL", "1", "Line", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 100.0, 500.0, 200.0, 500.0, true, true, 60)
+	var l_b = SurfaceCandidateClass.new("l_b", "VISUAL", "2", "Line", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 210.0, 501.0, 320.0, 501.0, true, true, 60)
+	var collinear_res = fusion_builder._deduplicate_platforms([l_a, l_b])
+	assert(collinear_res.size() == 1 and collinear_res[0].x2 >= 320.0, "近共线短间距应合并")
+	print("[PASS] 测试 31: 近共线线段合并验证成功")
+
+
+	# 测试 32: 窗口遮挡裁剪 UI 平台
+	var win_w1 = {"id": "w1", "z_order": 1, "rect": Rect2(100.0, 100.0, 600.0, 400.0)}
+	var win_w0 = {"id": "w0", "z_order": 0, "rect": Rect2(200.0, 50.0, 200.0, 500.0)} # 高Z遮挡
+	var clipped_inv = fusion_builder._clip_by_windows([[150.0, 550.0]], 200.0, "w1", [win_w1, win_w0])
+	assert(clipped_inv.size() == 2, "被顶层窗口遮挡的中间段应被裁剪为前后两段")
+	print("[PASS] 测试 32: 窗口遮挡裁剪 UI 平台验证成功")
+
+	# 测试 33: 多源全流程融合提交与版本防抖
+	world_model.windows_by_id = {"w1": win_w1}
+	ui_model.elements_by_id = {"btn1": {"id": "btn1", "window_id": "w1", "control_type": "Button", "rect": Rect2(150.0, 200.0, 100.0, 40.0)}}
+	vis_model.geometries_by_id = {"vg1": {"id": "vg1", "type": "LINE", "orientation": "HORIZONTAL", "p1": Vector2(120.0, 350.0), "p2": Vector2(300.0, 350.0)}}
+	assert(fusion_builder.execute_fusion() == true, "全流程融合更新应生效")
+	var prev_rev = surf_model.surface_revision
+	assert(surf_model.surfaces_by_id.has("screen:ground"), "应包含地面")
+	assert(surf_model.surfaces_by_id.has("w1:top"), "应包含窗口顶边")
+	assert(surf_model.surfaces_by_id.has("uia:btn1:top"), "应包含按钮顶边")
+	assert(surf_model.surfaces_by_id.has("vg:vg1"), "应包含视觉横线")
+	assert(fusion_builder.execute_fusion() == false, "无几何变动时不应增加 revision")
+	assert(surf_model.surface_revision == prev_rev, "revision 保持稳定")
+	print("[PASS] 测试 33: 多源全流程融合与版本防抖验证成功")
+
+	# 测试 34: 丢失 Grace 保护期
+	ui_model.elements_by_id = {} # 模拟 UI 短暂漏检
+	fusion_builder.execute_fusion()
+	assert(surf_model.surfaces_by_id.has("uia:btn1:top"), "在 Grace 保护期内丢失的表面仍应保留")
+	print("[PASS] 测试 34: 丢失 Grace 保护期验证成功")
+
+	fusion_builder.queue_free()
 	vis_model.queue_free()
 	ui_model.queue_free()
 	surf_model.queue_free()
 	bridge.stop_server(); bridge.queue_free()
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
-	print("========== T15 Visual Geometry Perception 单元测试全部通过 ==========")
+	print("========== T16 Unified Surface Fusion 单元测试全部通过 ==========")
 	quit(0)
+
 
 
 

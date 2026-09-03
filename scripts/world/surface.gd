@@ -25,8 +25,12 @@ var y2: float = 0.0
 var walkable: bool = false
 var dynamic: bool = true
 var length: float = 0.0
+var source_aliases: Array[String] = []
+var element_type: String = ""
+var priority: int = 0
 
 func _init(p_id: String = "", p_src_id: String = "", p_src_type: String = "WINDOW",
+
 		p_type: int = SurfaceType.PLATFORM, p_orient: int = Orientation.TOP,
 		p_x1: float = 0.0, p_y1: float = 0.0, p_x2: float = 0.0, p_y2: float = 0.0,
 		p_walkable: bool = false, p_dynamic: bool = true) -> void:
@@ -73,5 +77,9 @@ func to_dict() -> Dictionary:
 		"x1": x1, "y1": y1, "x2": x2, "y2": y2,
 		"walkable": walkable,
 		"dynamic": dynamic,
-		"length": length
+		"length": length,
+		"source_aliases": source_aliases,
+		"element_type": element_type,
+		"priority": priority
 	}
+

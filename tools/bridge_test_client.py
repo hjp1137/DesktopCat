@@ -126,10 +126,12 @@ def main():
             elif c in ["f10", "physics"]: client.send_cmd("TOGGLE_DEBUG_PHYSICS")
             elif c in ["f11", "ui"]: client.send_cmd("TOGGLE_DEBUG_UI")
             elif c in ["f12", "visual"]: client.send_cmd("TOGGLE_DEBUG_VISUAL")
+            elif c in ["f13", "fusion", "diag"]: client.send_cmd("TOGGLE_DEBUG_FUSION")
             elif c == "snapshot": client.send_json({"v": 1, "type": "surface_snapshot", "revision": 1})
             elif c == "help":
-                print("Commands: ping, status, jump, stop, left, right, run_left, run_right, sit, sleep, wake, auto, look <x> <y>, move <x> <y>, clear, stress [sec], f8 (windows), f9 (surfaces), f10 (physics), f11 (ui), f12 (visual), bad_json, unknown, snapshot, quit")
+                print("Commands: ping, status, jump, stop, left, right, run_left, run_right, sit, sleep, wake, auto, look <x> <y>, move <x> <y>, clear, stress [sec], f8 (windows), f9 (surfaces), f10 (physics), f11 (ui), f12 (visual), f13 (fusion), bad_json, unknown, snapshot, quit")
             else: client.send_raw(cmd_line)
+
 
 
 

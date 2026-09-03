@@ -37,8 +37,10 @@ var window_world_model: Node = null
 var surface_world_model: Node = null
 var ui_element_world_model: Node = null
 var visual_world_model: Node = null
+var surface_fusion_builder: Node = null
 
 func _ready() -> void:
+
 
 
 	start_server(port)
@@ -245,6 +247,12 @@ func _handle_command_message(data: Dictionary) -> void:
 			visual_world_model.toggle_debug_draw()
 		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
 		return
+	if cmd_name in ["TOGGLE_DEBUG_FUSION", "TOGGLE_DEBUG_DIAGNOSTICS"]:
+		if is_instance_valid(surface_fusion_builder) and surface_fusion_builder.has_method("toggle_debug_diagnostics"):
+			surface_fusion_builder.toggle_debug_diagnostics()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
+		return
+
 
 
 

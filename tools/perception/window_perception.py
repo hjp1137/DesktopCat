@@ -291,6 +291,16 @@ class WindowPerceptionService:
                 print(f"[Perception] 检测到快捷键 [{name}]，切换【Visual Geometry 视觉几何】调试线框...")
                 self._send_msg({"v": 1, "type": "command", "name": "TOGGLE_DEBUG_VISUAL"})
                 self._recv_line()
+        hotkeys_fusion = {0x48: "H", 0x59: "Y"}
+        for vk, name in hotkeys_fusion.items():
+            is_down = bool(user32.GetAsyncKeyState(vk) & 0x8000)
+            was_down = self.hotkey_states.get(vk, False)
+            self.hotkey_states[vk] = is_down
+            if is_down and not was_down:
+                print(f"[Perception] 检测到快捷键 [{name}]，切换【Unified Surface Fusion 融合诊断】调试线框...")
+                self._send_msg({"v": 1, "type": "command", "name": "TOGGLE_DEBUG_FUSION"})
+                self._recv_line()
+
 
 
 

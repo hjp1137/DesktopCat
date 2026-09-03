@@ -17,17 +17,21 @@
      ├─ [SurfaceWorldModel] (F9 物理表面，T12 顶边切分)
      ├─ [UIElementWorldModel] (F11 控件几何)
      └─ [VisualWorldModel] (F12 视觉线条与矩形)
-                  ↓ (T13 Multi-Surface Physics / T16 表面融合)
-[Cat Physics & Behavior] (真实多表面着陆、行走、跳跃与探索)
+                  ↓ (T16 SurfaceFusionBuilder: Debounce / Dedup / Merge / Grace)
+[SurfaceWorldModel (唯一物理世界入口)] (F9 物理表面，汇聚三路感知)
+                  ↓ (T13 Multi-Surface Physics: Swept Landing / One-Way / Move Follow)
+[Cat Physics & Behavior] (在窗口、按钮、文本、视觉线条上真实着陆与生活行走)
 ```
 
 ## 3. 阶段演进规划
-1. **T11（已完成）**：顶层窗口几何感知（Window Geometry Perception），完成 Win32 数据采集、局部坐标转换、裁剪与 `WindowWorldModel` 存储；
-2. **T12（已完成）**：窗口几何转 Surface 物理世界（Surface World），提取 `PLATFORM`（顶边/底边/屏幕地面）与 `WALL`（左右侧边/屏幕墙），实现轻量顶边遮挡切分与空间查询 API，F9 独立调试渲染；
-3. **T13（已完成）**：多表面动态物理系统（Multi-Surface Cat Physics），正式打破单一 `ground_y` 世界假设，实现小猫跳跃/下落着陆到 Window Top、在窗口上行走/跑/坐/睡、边缘自然掉落、窗口拖拽跟随与 F10 物理调试；
-4. **T14（已完成）**：Windows UI Automation 元素感知（UI Automation Element Perception），通过原生 COM 提取窗口内部控件几何（Button/Edit/Text 等），三维预算控制，F11 独立调试线框，不影响鼠标穿透；
-5. **T15（已完成）**：轻量视觉几何感知（Lightweight Visual Geometry Perception），原生 GDI 抓屏、降采样灰度边缘提取、线段合并与 Rect 组合、时序平滑滤波、`VisualWorldModel` 存储与 F12 调试线框；
-6. **T16（下一阶段）**：视觉/控件/窗口多感知表面融合与跳跃规划 (Multi-Modal Surface Fusion & Jump Planning)；
-7. **T17**：抓边与攀爬系统 (Edge Grab + Climb)；
-8. **T18**：自主探索系统 (Autonomous Exploration)。
+1. **T11（已完成）**：顶层窗口几何感知（Window Geometry Perception）；
+2. **T12（已完成）**：窗口几何转 Surface 物理世界（Surface World）；
+3. **T13（已完成）**：多表面动态物理系统（Multi-Surface Cat Physics）；
+4. **T14（已完成）**：Windows UI Automation 元素感知（UI Automation Element Perception）；
+5. **T15（已完成）**：轻量视觉几何感知（Lightweight Visual Geometry Perception）；
+6. **T16（已完成）**：统一表面融合与几何简化（Unified Surface Fusion & Simplification），通过 `SurfaceFusionBuilder` 建立唯一 `SurfaceWorldModel`，使小猫天然在文本、按钮、输入框、图片与视觉线条上行走与着陆；
+7. **T17**：导航图与跳跃规划系统 (Platform Navigation Graph & Jump Planning)；
+8. **T18**：抓边与攀爬系统 (Edge Grab + Climb)；
+9. **T19**：自主探索系统 (Autonomous Exploration)。
+
 

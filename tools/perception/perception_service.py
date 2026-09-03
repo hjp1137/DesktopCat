@@ -38,10 +38,11 @@ def run_visual_service():
 
 def main():
     print("==================================================")
-    print("DesktopCat - Unified Perception Service (T15)")
+    print("DesktopCat - Unified Perception Service (T16)")
     print("同时托管: Window (10Hz) + UIA (2Hz) + Visual (2Hz)")
-    print("全局快捷键: [F8] 窗口 | [F9] 物理表面 | [F10] 接触点 | [F11] UI控件 | [F12] 视觉几何")
+    print("全局快捷键: [F8] 窗口 | [F9] 物理表面 | [F10] 接触点 | [F11] UI控件 | [F12] 视觉几何 | [H/Y] 融合诊断")
     print("==================================================")
+
     
     t_win = threading.Thread(target=run_window_service, daemon=True)
     t_uia = threading.Thread(target=run_uia_service, daemon=True)

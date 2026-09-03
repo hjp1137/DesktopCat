@@ -78,7 +78,10 @@ func rebuild_from_windows(windows: Dictionary, overlay_sz: Vector2, ground_y: fl
 		if new_surfaces.size() >= MAX_SURFACES:
 			break
 	previous_window_positions = new_positions
-	window_deltas = new_deltas
+	return commit_surfaces(new_surfaces, new_deltas)
+
+func commit_surfaces(new_surfaces: Dictionary, new_window_deltas: Dictionary = {}) -> bool:
+	window_deltas = new_window_deltas
 
 
 	var sig_parts: Array[String] = []
@@ -97,6 +100,7 @@ func rebuild_from_windows(windows: Dictionary, overlay_sz: Vector2, ground_y: fl
 		queue_redraw()
 		return true
 	return false
+
 
 func _extract_window_surfaces(win: Dictionary, all_windows: Array, out_dict: Dictionary) -> void:
 	var wid: String = win.id
