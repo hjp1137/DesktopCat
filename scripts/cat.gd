@@ -94,6 +94,9 @@ var edge_grab_stats: Dictionary = {
 @export var auto_max_wall_climb_duration: float = 4.0
 @export var wall_cooldown_time: float = 1.0
 
+var is_planned_wall_climb: bool = false
+var planned_wall_climb_timeout: float = 6.0
+
 var current_wall_attachment: RefCounted = null
 var current_wall_climb_dir: WallClimbDirection = WallClimbDirection.NONE
 var auto_wall_pause_timer: float = 0.0
@@ -631,31 +634,38 @@ func release_edge() -> void:
 	change_state(CatState.FALL)
 	print("[EdgeGrab] Released")
 
+func can_climb_up_surface(s: RefCounted, edge_side: int) -> Dictionary:
+	if s == null or not bool(s.walkable):
+		return { "feasible": false, "reason": "SURFACE_LOST" }
+	if not is_instance_valid(surface_world_model):
+		return { "feasible": false, "reason": "NO_SURFACE_MODEL" }
+	var surf_len: float = absf(float(s.x2) - float(s.x1))
+	var min_len: float = min_climb_up_platform_length
+	if metrics != null and "min_platform_length" in metrics:
+		min_len = float(metrics.min_platform_length)
+	if surf_len < min_len:
+		return { "feasible": false, "reason": "NO_LANDING_SPACE" }
+	var target_foot_x: float = (minf(float(s.x1), float(s.x2)) + climb_inward_margin) if edge_side == -1 else (maxf(float(s.x1), float(s.x2)) - climb_inward_margin)
+	var target_foot_y: float = float(s.y1)
+	var chk_box := Rect2(target_foot_x - 18.0 - climb_clearance_margin, target_foot_y - 36.0 - climb_clearance_margin, 36.0 + climb_clearance_margin * 2.0, 34.0)
+	for other_s in surface_world_model.surfaces_by_id.values():
+		if str(other_s.id) == str(s.id): continue
+		if int(other_s.surface_type) == 0 and int(other_s.orientation) == 0:
+			var oy: float = float(other_s.y1)
+			if oy < target_foot_y and oy >= target_foot_y - 36.0:
+				var ox_min: float = minf(float(other_s.x1), float(other_s.x2))
+				var ox_max: float = maxf(float(other_s.x1), float(other_s.x2))
+				if ox_max > chk_box.position.x and ox_min < chk_box.end.x:
+					return { "feasible": false, "reason": "CLEARANCE_BLOCKED" }
+	return { "feasible": true, "surface": s, "target_foot_x": target_foot_x, "target_foot_y": target_foot_y }
+
 func check_climb_feasibility() -> Dictionary:
 	if grabbed_edge == null or grabbed_surface_id == "":
 		return { "feasible": false, "reason": "NO_GRABBED_EDGE" }
 	if not is_instance_valid(surface_world_model):
 		return { "feasible": false, "reason": "NO_SURFACE_MODEL" }
 	var s = surface_world_model.get_surface_by_id(grabbed_surface_id)
-	if s == null or not s.walkable:
-		return { "feasible": false, "reason": "SURFACE_LOST" }
-	var surf_len: float = absf(s.x2 - s.x1)
-	if surf_len < min_climb_up_platform_length:
-		return { "feasible": false, "reason": "NO_LANDING_SPACE" }
-	var target_foot_x: float = (minf(s.x1, s.x2) + climb_inward_margin) if grabbed_edge.edge_side == -1 else (maxf(s.x1, s.x2) - climb_inward_margin)
-	var target_foot_y: float = s.y1
-	# 检查上方 clearance
-	var chk_box := Rect2(target_foot_x - 18.0 - climb_clearance_margin, target_foot_y - 36.0 - climb_clearance_margin, 36.0 + climb_clearance_margin * 2.0, 34.0)
-	for other_s in surface_world_model.surfaces_by_id.values():
-		if other_s.id == s.id: continue
-		if other_s.surface_type == 0 and other_s.orientation == 0:
-			var oy: float = other_s.y1
-			if oy < target_foot_y and oy >= target_foot_y - 36.0:
-				var ox_min: float = minf(other_s.x1, other_s.x2)
-				var ox_max: float = maxf(other_s.x1, other_s.x2)
-				if ox_max > chk_box.position.x and ox_min < chk_box.end.x:
-					return { "feasible": false, "reason": "CLEARANCE_BLOCKED" }
-	return { "feasible": true, "surface": s, "target_foot_x": target_foot_x, "target_foot_y": target_foot_y }
+	return can_climb_up_surface(s, grabbed_edge.edge_side)
 
 func start_climb() -> bool:
 	if current_state == CatState.CLIMB_UP: return true
@@ -873,6 +883,7 @@ func release_wall(reason: String = "MANUAL") -> void:
 	print("[Wall] Released: %s -> FALL" % reason)
 	current_wall_attachment = null
 	current_wall_climb_dir = WallClimbDirection.NONE
+	is_planned_wall_climb = false
 	wall_cooldown = wall_cooldown_time
 	is_grounded = false
 	current_surface_id = ""
@@ -927,8 +938,11 @@ func _update_wall_behavior(delta: float) -> void:
 				print("[Wall] AUTO climb UP started")
 		elif current_state == CatState.WALL_CLIMB:
 			auto_wall_climb_timer += delta
-			if auto_wall_climb_timer > auto_max_wall_climb_duration:
-				print("[Wall] AUTO climb duration exceeded (%.1fs) -> release" % auto_max_wall_climb_duration)
+			var climb_timeout := auto_max_wall_climb_duration
+			if is_planned_wall_climb:
+				climb_timeout = clampf(planned_wall_climb_timeout, 4.0, 15.0)
+			if auto_wall_climb_timer > climb_timeout:
+				print("[Wall] AUTO climb duration exceeded (%.1fs) -> release" % climb_timeout)
 				release_wall("AUTO_TIMEOUT")
 				return
 
@@ -949,6 +963,7 @@ func _update_wall_behavior(delta: float) -> void:
 					print("[Wall] Reached top of %s -> transition to EDGE_HANG on %s" % [s.id, p_surf.id])
 					current_wall_attachment = null
 					current_wall_climb_dir = WallClimbDirection.NONE
+					is_planned_wall_climb = false
 					_grab_edge({ "surface_id": p_surf.id, "side": p_side, "x": p_pos.x, "y": p_pos.y })
 					if current_mode == ControlMode.AUTO: auto_climb_pause_timer = 0.0
 					return

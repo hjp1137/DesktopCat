@@ -3,7 +3,13 @@ extends SceneTree
 const SurfaceClass = preload("res://scripts/world/surface.gd")
 const SurfaceWorldModelClass = preload("res://scripts/world/surface_world_model.gd")
 const TraversalPlanClass = preload("res://scripts/navigation/traversal_plan.gd")
+const TraversalStepClass = preload("res://scripts/navigation/traversal_step.gd")
+const TraversalRouteClass = preload("res://scripts/navigation/traversal_route.gd")
 const AutonomousJumpPlannerClass = preload("res://scripts/navigation/autonomous_jump_planner.gd")
+const NavigationNodeClass = preload("res://scripts/navigation/navigation_node.gd")
+const NavigationEdgeClass = preload("res://scripts/navigation/navigation_edge.gd")
+const PlatformNavigationGraphClass = preload("res://scripts/navigation/platform_navigation_graph.gd")
+const WallAttachmentClass = preload("res://scripts/world/wall_attachment.gd")
 
 func _init() -> void:
 
@@ -971,6 +977,7 @@ func _init() -> void:
 	cat.current_mode = Cat.ControlMode.AUTO
 	cat.change_state(Cat.CatState.WALK)
 	planner.cooldown_timer = 0.0
+	planner.failed_edges_blacklist.clear()
 	assert(planner.try_plan_traversal() == true, "自主规划成功")
 	planner.current_phase = AutonomousJumpPlannerClass.TraversalPhase.AIRBORNE
 	cat.is_grounded = false
@@ -1251,6 +1258,147 @@ func _init() -> void:
 	assert(poly.size() == 4, "鼠标穿透多边形顶点正确")
 	print("[PASS] 测试 90: Mouse Passthrough 多边形与 Area2D Hitbox 动态跟随验证成功")
 
+	# 测试 91: NavigationNode 扩展 NodeType.WALL 与 Wall 几何字段
+	var s_wall_test = SurfaceClass.new("w1", "s1", "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, 400.0, 200.0, 400.0, 320.0, false, false)
+	s_wall_test.climbable = true
+	var wall_node = NavigationNodeClass.new(s_wall_test, 14.0)
+	assert(wall_node.node_type == NavigationNodeClass.NodeType.WALL, "Wall 表面成功构造 NodeType.WALL 节点")
+	assert(wall_node.wall_x == 400.0 and wall_node.wall_y1 == 200.0 and wall_node.wall_y2 == 320.0, "Wall 节点几何坐标正确")
+	assert(wall_node.attach_side == -1, "LEFT 墙 attach_side 自动设为 -1")
+	assert(wall_node.navigable == true, "安全爬墙高度足够时可导航")
+	print("[PASS] 测试 91: NavigationNode 扩展 NodeType.WALL 与 Wall 几何字段验证成功")
+
+	# 测试 92: NavigationEdge 扩展 ActionType (JUMP_TO_WALL, DROP_TO_WALL, WALL_TO_PLATFORM)
+	var edge_jw = NavigationEdgeClass.new("src", "tgt", NavigationEdgeClass.ActionType.JUMP_TO_WALL, 1, "WALK", 100.0, 150.0, 400.0, 400.0, 0.8, 300.0, 50.0, 1.5, 0.2)
+	assert(edge_jw.get_action_name() == "JUMP_TO_WALL", "ActionType.JUMP_TO_WALL 名字正确")
+	var edge_wp = NavigationEdgeClass.new("w1", "p1", NavigationEdgeClass.ActionType.WALL_TO_PLATFORM, -1, "NONE")
+	edge_wp.execution_sequence = ["WALL_CLIMB", "EDGE_HANG", "CLIMB_UP"]
+	assert(edge_wp.get_action_name() == "WALL_TO_PLATFORM" and edge_wp.execution_sequence.size() == 3, "WALL_TO_PLATFORM 边包含多步执行序列")
+	print("[PASS] 测试 92: NavigationEdge 扩展 ActionType 验证成功")
+
+	# 测试 93: TraversalStep 与 TraversalRoute 数据结构与序列化
+	var step1 = TraversalStepClass.new(0, NavigationEdgeClass.ActionType.JUMP_TO_WALL, "p0", "w1", { "direction": 1 }, 3.0)
+	var step2 = TraversalStepClass.new(1, NavigationEdgeClass.ActionType.WALL_TO_PLATFORM, "w1", "p1", {}, 4.0)
+	var route_test = TraversalRouteClass.new("p0", "p1", [step1, step2], 2.8, 1, 1)
+	assert(route_test.steps.size() == 2, "Route 包含两个执行步骤")
+	assert(route_test.get_current_step() == step1, "当前步骤为 step1")
+	assert(route_test.advance_step() == true and route_test.get_current_step() == step2, "advance_step 推进至 step2")
+	var r_dict = route_test.to_dict()
+	assert(r_dict.total_steps == 2 and r_dict.status == "PENDING", "Route to_dict 序列化正确")
+	print("[PASS] 测试 93: TraversalStep 与 TraversalRoute 数据结构与序列化验证成功")
+
+	# 测试 94: cat.can_climb_up_surface 公共判定方法
+	var s_plat_valid = SurfaceClass.new("p_valid", "w1", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 400.0, 200.0, 500.0, 200.0, true, true)
+	surf_model.surfaces_by_id["p_valid"] = s_plat_valid
+	var feas_valid = cat.can_climb_up_surface(s_plat_valid, -1)
+	assert(feas_valid.feasible == true, "满足长度与 clearance 的平台允许翻越")
+	var s_plat_short = SurfaceClass.new("p_short", "w1", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 400.0, 200.0, 410.0, 200.0, true, true)
+	assert(cat.can_climb_up_surface(s_plat_short, -1).feasible == false, "平台长度过短拒绝翻越")
+	print("[PASS] 测试 94: cat.can_climb_up_surface 公共翻越空间判定验证成功")
+
+	# 测试 95: Graph 生成 Wall Node，满足 min_climbable_wall_length，排除 SCREEN 假墙
+	var g_test = PlatformNavigationGraphClass.new(cat)
+	g_test.surface_world_model = surf_model
+	surf_model.surfaces_by_id.clear()
+	var s_scr_wall = SurfaceClass.new("screen:left_wall", "screen", "SCREEN", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, 0.0, 0.0, 0.0, 800.0, false, false)
+	s_scr_wall.climbable = true
+	var s_short_wall = SurfaceClass.new("w_tiny", "w1", "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, 200.0, 100.0, 200.0, 120.0, false, false)
+	s_short_wall.climbable = true
+	var s_valid_wall = SurfaceClass.new("w_legit", "w1", "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, 350.0, 100.0, 350.0, 280.0, false, false)
+	s_valid_wall.climbable = true
+	surf_model.surfaces_by_id["screen:left_wall"] = s_scr_wall
+	surf_model.surfaces_by_id["w_tiny"] = s_short_wall
+	surf_model.surfaces_by_id["w_legit"] = s_valid_wall
+	g_test.rebuild_graph()
+	assert(not g_test.nodes.has("screen:left_wall"), "自动排除 SCREEN 假墙节点")
+	assert(not g_test.nodes.has("w_tiny"), "自动排除长度不足的短墙节点")
+	assert(g_test.nodes.has("w_legit"), "合法高度 Wall 成功生成 Wall Node")
+	print("[PASS] 测试 95: Graph Wall Node 门槛与假墙过滤验证成功")
+
+	# 测试 96: _check_jump_to_wall_edge 弹道分析与外侧（Outside-Side）约束
+	var s_plat_left = SurfaceClass.new("p_left", "w_src", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 150.0, 220.0, 280.0, 220.0, true, true)
+	surf_model.surfaces_by_id["p_left"] = s_plat_left
+	var node_plat = NavigationNodeClass.new(s_plat_left)
+	var node_wall = NavigationNodeClass.new(s_valid_wall)
+	var jw_edge = g_test._check_jump_to_wall_edge(node_plat, node_wall, surf_model.surfaces_by_id.values())
+	assert(jw_edge != null, "左侧平台应当能生成跳向合法外侧墙的 JUMP_TO_WALL 边")
+	assert(jw_edge.action_type == NavigationEdgeClass.ActionType.JUMP_TO_WALL, "边类型为 JUMP_TO_WALL")
+	assert(jw_edge.direction == 1, "小猫必须向右跳向墙体")
+	print("[PASS] 测试 96: _check_jump_to_wall_edge 弹道分析与外侧约束验证成功")
+
+	# 测试 97: JUMP_TO_WALL 速度与安全区间约束验证
+	var s_plat_too_high = SurfaceClass.new("p_high", "w_src", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 150.0, -400.0, 280.0, -400.0, true, true)
+	var node_high = NavigationNodeClass.new(s_plat_too_high)
+	assert(g_test._check_jump_to_wall_edge(node_high, node_wall, surf_model.surfaces_by_id.values()) == null, "下落速度过大超过500px/s时拒绝生成边")
+	print("[PASS] 测试 97: JUMP_TO_WALL 速度超限拒绝验证成功")
+
+	# 测试 98: _check_drop_to_wall_edge 边缘贴靠判定与边生成
+	var s_plat_edge = SurfaceClass.new("p_edge", "w_src", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 335.0, 95.0, 350.0, 95.0, true, true)
+	var node_edge = NavigationNodeClass.new(s_plat_edge)
+	var dw_edge = g_test._check_drop_to_wall_edge(node_edge, node_wall, surf_model.surfaces_by_id.values())
+	assert(dw_edge != null and dw_edge.action_type == NavigationEdgeClass.ActionType.DROP_TO_WALL, "贴近墙顶时生成 DROP_TO_WALL 边")
+	print("[PASS] 测试 98: _check_drop_to_wall_edge 边缘贴靠与下落抓墙边生成验证成功")
+
+	# 测试 99: _check_wall_to_platform_edge 几何相连性与预估时间
+	var s_plat_top = SurfaceClass.new("p_top", "w_tgt", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 350.0, 100.0, 500.0, 100.0, true, true)
+	surf_model.surfaces_by_id["p_top"] = s_plat_top
+	var node_top = NavigationNodeClass.new(s_plat_top)
+	var wp_edge = g_test._check_wall_to_platform_edge(node_wall, node_top, surf_model.surfaces_by_id.values())
+	assert(wp_edge != null, "墙顶相连且空间充足时成功生成 WALL_TO_PLATFORM 边")
+	assert(wp_edge.action_type == NavigationEdgeClass.ActionType.WALL_TO_PLATFORM, "边类型为 WALL_TO_PLATFORM")
+	assert(wp_edge.estimated_climb_time > 0.0, "预估爬墙时间大于0")
+	print("[PASS] 测试 99: _check_wall_to_platform_edge 几何相连与预估时间验证成功")
+
+	# 测试 100: 全图重建统计 Platform/Wall 节点与多类型边数量
+	g_test.rebuild_graph()
+	assert(g_test.stats.get("platform_nodes", 0) >= 2, "统计记录 Platform 节点")
+	assert(g_test.stats.get("wall_nodes", 0) >= 1, "统计记录 Wall 节点")
+	assert(g_test.stats.get("jump_to_wall_edges", 0) >= 1, "统计记录 jump_to_wall_edges")
+	assert(g_test.stats.get("wall_to_platform_edges", 0) >= 1, "统计记录 wall_to_platform_edges")
+	print("[PASS] 测试 100: 全图重建平台节点、墙节点与多类型边统计验证成功")
+
+	# 测试 101: Dijkstra 算法 find_route 搜索完整多步路线
+	var route_found = g_test.find_route("p_left", "p_top")
+	assert(route_found != null, "应当成功搜索出 p_left -> w_legit -> p_top 路线")
+	assert(route_found.steps.size() == 2, "包含 2 个执行步骤 (JUMP_TO_WALL + WALL_TO_PLATFORM)")
+	assert(route_found.steps[0].action_type == NavigationEdgeClass.ActionType.JUMP_TO_WALL, "第一步为 JUMP_TO_WALL")
+	assert(route_found.steps[1].action_type == NavigationEdgeClass.ActionType.WALL_TO_PLATFORM, "第二步为 WALL_TO_PLATFORM")
+	print("[PASS] 测试 101: Dijkstra find_route 多步路线搜索验证成功")
+
+	# 测试 102: AutonomousJumpPlanner 支持 TraversalRoute 启动与步骤初始化
+	var planner_t22 = AutonomousJumpPlannerClass.new(cat, cmd_mgr, g_test, surf_model)
+	root.add_child(planner_t22)
+	assert(planner_t22._start_route(route_found) == true, "Planner 成功启动多步路线")
+	assert(planner_t22.current_route == route_found, "current_route 绑定成功")
+	assert(planner_t22.current_phase == AutonomousJumpPlannerClass.TraversalPhase.APPROACH_TAKEOFF, "进入第 1 步 APPROACH_TAKEOFF")
+	print("[PASS] 测试 102: AutonomousJumpPlanner TraversalRoute 启动验证成功")
+
+	# 测试 103: AutonomousJumpPlanner 挂墙事件推进至第 2 步 (WALL_TO_PLATFORM)
+	cat.change_state(Cat.CatState.WALL_CLING)
+	cat.current_wall_attachment = WallAttachmentClass.new("w_legit", 350.0, 100.0, 280.0, 150.0, -1, 2)
+	planner_t22.current_phase = AutonomousJumpPlannerClass.TraversalPhase.AIRBORNE
+	planner_t22._update_airborne(0.016)
+	assert(planner_t22.current_route.current_step_index == 1, "挂上目标墙后步骤自动推进到 step 1")
+	assert(planner_t22.current_phase == AutonomousJumpPlannerClass.TraversalPhase.CLIMBING_WALL, "自动转入 CLIMBING_WALL 阶段")
+	print("[PASS] 测试 103: 抓墙命中自动推进多步路线步骤验证成功")
+
+	# 测试 104: 登顶信号触发路线成功完成 (routes_completed 增加)
+	planner_t22.current_phase = AutonomousJumpPlannerClass.TraversalPhase.CLIMBING_UP
+	planner_t22._on_cat_climb_completed("p_top")
+	assert(planner_t22.current_phase == AutonomousJumpPlannerClass.TraversalPhase.IDLE, "路线完成后回归 IDLE")
+	assert(int(planner_t22.stats.get("routes_completed", 0)) >= 1, "routes_completed 计数递增")
+	assert(int(planner_t22.stats.get("climb_routes_success", 0)) >= 1, "climb_routes_success 计数递增")
+	print("[PASS] 测试 104: 登顶信号触发多步路线成功完成验证成功")
+
+	# 测试 105: 缩放变化触发 METRICS_REVISION_CHANGED 安全取消
+	var route_cancel_test = g_test.find_route("p_left", "p_top")
+	planner_t22._start_route(route_cancel_test)
+	cat.adjust_user_scale(0.2)
+	planner_t22.update(0.016)
+	assert(planner_t22.current_route == null, "Scale 发生变化时安全取消当前路线")
+	print("[PASS] 测试 105: 缩放突变触发安全取消机制验证成功")
+
+	planner_t22.queue_free()
 	fusion_builder.queue_free()
 	vis_model.queue_free()
 	ui_model.queue_free()
@@ -1259,7 +1407,7 @@ func _init() -> void:
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
 	planner.queue_free()
-	print("========== T20A Adaptive Cat Scale & CatMetrics 单元测试全部通过 (共90项测试) ==========")
+	print("========== T22 Climb Navigation Integration 单元测试全部通过 (共105项测试) ==========")
 	quit(0)
 
 

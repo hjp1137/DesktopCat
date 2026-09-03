@@ -270,6 +270,10 @@ func _handle_key_event(event: InputEventKey) -> bool:
 			if is_instance_valid(cat) and cat.has_method("toggle_metrics_debug"):
 				cat.toggle_metrics_debug()
 			return true
+		KEY_F20:
+			if autonomous_jump_planner and autonomous_jump_planner.has_method("toggle_route_debug"):
+				autonomous_jump_planner.toggle_route_debug()
+			return true
 		KEY_BRACKETLEFT:
 			if is_instance_valid(cat) and cat.has_method("adjust_user_scale"):
 				cat.adjust_user_scale(-0.1)
@@ -282,10 +286,10 @@ func _handle_key_event(event: InputEventKey) -> bool:
 			if is_instance_valid(cat) and cat.has_method("reset_user_scale"):
 				cat.reset_user_scale()
 			return true
-		KEY_P:
+		KEY_P, KEY_R:
 			if autonomous_jump_planner and autonomous_jump_planner.has_method("try_plan_traversal"):
 				var ok: bool = autonomous_jump_planner.try_plan_traversal()
-				print("[Main] P 键触发自主跳跃规划: %s" % ("成功" if ok else "未触发(条件未满足/无有效边/冷却中)"))
+				print("[Main] P/R 键触发自主路线规划: %s" % ("成功启动" if ok else "未触发(条件未满足/无有效边/冷却中)"))
 			return true
 		KEY_T:
 			if platform_navigation_graph and platform_navigation_graph.has_method("print_current_nav_summary"):

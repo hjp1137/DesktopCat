@@ -1,7 +1,14 @@
 class_name NavigationEdge
 extends RefCounted
 
-enum ActionType { JUMP_WALK, JUMP_RUN, DROP }
+enum ActionType {
+	JUMP_WALK = 0,
+	JUMP_RUN = 1,
+	DROP = 2,
+	JUMP_TO_WALL = 3,
+	DROP_TO_WALL = 4,
+	WALL_TO_PLATFORM = 5
+}
 
 var source_surface_id: String = ""
 var target_surface_id: String = ""
@@ -17,6 +24,12 @@ var horizontal_distance: float = 0.0
 var vertical_delta: float = 0.0
 var cost: float = 1.0
 var difficulty: float = 0.0
+
+var attach_side: int = 0
+var attach_y_min: float = 0.0
+var attach_y_max: float = 0.0
+var estimated_climb_time: float = 0.0
+var execution_sequence: Array = []
 
 func _init(p_src: String = "", p_tgt: String = "", p_action: int = ActionType.JUMP_WALK,
 		p_dir: int = 1, p_speed_mode: String = "WALK", p_t_min: float = 0.0,
@@ -43,6 +56,9 @@ func get_action_name() -> String:
 		ActionType.JUMP_WALK: return "JUMP_WALK"
 		ActionType.JUMP_RUN: return "JUMP_RUN"
 		ActionType.DROP: return "DROP"
+		ActionType.JUMP_TO_WALL: return "JUMP_TO_WALL"
+		ActionType.DROP_TO_WALL: return "DROP_TO_WALL"
+		ActionType.WALL_TO_PLATFORM: return "WALL_TO_PLATFORM"
 	return "UNKNOWN"
 
 func to_dict() -> Dictionary:
@@ -53,5 +69,7 @@ func to_dict() -> Dictionary:
 		"takeoff_x_min": takeoff_x_min, "takeoff_x_max": takeoff_x_max,
 		"landing_x_min": landing_x_min, "landing_x_max": landing_x_max,
 		"flight_time": flight_time, "horizontal_distance": horizontal_distance,
-		"vertical_delta": vertical_delta, "cost": cost, "difficulty": difficulty
+		"vertical_delta": vertical_delta, "cost": cost, "difficulty": difficulty,
+		"attach_side": attach_side, "attach_y_min": attach_y_min, "attach_y_max": attach_y_max,
+		"estimated_climb_time": estimated_climb_time, "execution_sequence": execution_sequence
 	}

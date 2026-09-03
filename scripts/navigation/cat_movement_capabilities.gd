@@ -11,6 +11,15 @@ var landing_margin: float = 14.0
 var safety_factor: float = 0.90
 var max_drop_distance: float = 800.0
 
+var min_climbable_wall_length: float = 48.0
+var wall_attach_x_tolerance: float = 14.0
+var wall_cling_offset_x: float = 14.0
+var wall_contact_y_height: float = 18.0
+var wall_climb_speed: float = 60.0
+var max_wall_attach_vertical_speed: float = 500.0
+var max_wall_attach_horizontal_speed: float = 280.0
+var min_platform_length: float = 40.0
+
 func _init(cat_node: Node2D = null) -> void:
 	if is_instance_valid(cat_node):
 		sync_from_cat(cat_node)
@@ -22,15 +31,24 @@ func sync_from_cat(cat_node: Node2D) -> void:
 	if "jump_velocity" in cat_node: jump_velocity = float(cat_node.jump_velocity)
 	if "walk_speed" in cat_node: walk_speed = float(cat_node.walk_speed)
 	if "run_speed" in cat_node: run_speed = float(cat_node.run_speed)
+	if "wall_climb_speed" in cat_node: wall_climb_speed = float(cat_node.wall_climb_speed)
+	if "max_wall_attach_vertical_speed" in cat_node: max_wall_attach_vertical_speed = float(cat_node.max_wall_attach_vertical_speed)
+	if "max_wall_attach_horizontal_speed" in cat_node: max_wall_attach_horizontal_speed = float(cat_node.max_wall_attach_horizontal_speed)
+
 	var m = cat_node.get("metrics")
 	if m != null:
 		body_radius = float(m.body_radius)
 		foot_width = float(m.foot_width)
 		landing_margin = float(m.support_margin)
+		min_climbable_wall_length = float(m.min_climbable_wall_length)
+		wall_attach_x_tolerance = float(m.wall_attach_x_tolerance)
+		wall_cling_offset_x = float(m.wall_cling_offset_x)
+		min_platform_length = float(m.min_platform_length)
 	elif "body_radius" in cat_node:
 		body_radius = float(cat_node.body_radius)
 		foot_width = body_radius * 2.0
 		landing_margin = maxf(4.0, body_radius * 0.5)
+		if "wall_cling_offset_x" in cat_node: wall_cling_offset_x = float(cat_node.wall_cling_offset_x)
 
 func get_max_jump_height() -> float:
 	return (jump_velocity * jump_velocity) / (2.0 * gravity)

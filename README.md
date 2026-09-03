@@ -69,6 +69,11 @@
   - 到达墙顶时自动寻找连接平台平滑转入 `EDGE_HANG` 并衔接登顶翻越（`CLIMB_UP`）；
   - 支持动态表面跟随、超大位移（$>150\text{px}$）脱落与等价 Rebind；DRAG 拖拽及 G 键释放最高优先级打断；
   - 支持 `F18` 调试视图与外部 TCP 协议指令分发。
+- **T22 攀爬融合导航与多步路线规划 (Climb Navigation Integration)**：
+  - Surface Traversal Graph：NavigationNode 扩展 WALL 类型；支持 JUMP_TO_WALL, DROP_TO_WALL, WALL_TO_PLATFORM 边；
+  - 弹道分析与外侧（Outside-Side）约束验证，结合 CatMetrics 动态参数；
+  - 轻量 Dijkstra 路线搜索与防环机制，支持 Direct Jump 优先与深度限制；
+  - AutonomousJumpPlanner 多步执行、墙面附着过渡、EDGE_HANG 停顿、登顶结算与缩放突变安全取消。
 
 ## 运行方式与快捷键
 
@@ -91,6 +96,7 @@
   - `F17`：切换【Edge Climb-Up 平台翻越攀爬】调试视图（显示攀爬轨迹、Clearance框与相位）
   - `F18`：切换【Wall Attachment 垂直墙面攀爬】调试视图（显示墙面竖线、端点与附着状态）
   - `F19`：切换【Cat Metrics 几何度量与包围盒】调试视图（显示身体、脚底、抓点、挂墙点与多边形）
+  - `F20`：切换【Climb Navigation Route 攀爬融合路线规划】调试视图（按 `R` 手动触发多步攀爬路线搜索与测试）
   - `[` / `]`：调节小猫用户缩放（User Scale -0.1 / +0.1，支持 0.70~1.60 范围）
   - `\`：重置小猫用户缩放到默认值（1.00）
   - `TAB`：切换多显示器并重新自适应计算 Base Scale 与重新贴地（挂墙、悬挂与翻越时自动安全脱落）
