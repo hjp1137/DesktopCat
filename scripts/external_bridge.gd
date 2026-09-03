@@ -38,8 +38,10 @@ var surface_world_model: Node = null
 var ui_element_world_model: Node = null
 var visual_world_model: Node = null
 var surface_fusion_builder: Node = null
+var platform_navigation_graph: Node = null
 
 func _ready() -> void:
+
 
 
 
@@ -252,6 +254,17 @@ func _handle_command_message(data: Dictionary) -> void:
 			surface_fusion_builder.toggle_debug_diagnostics()
 		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
 		return
+	if cmd_name in ["TOGGLE_DEBUG_NAV", "TOGGLE_DEBUG_GRAPH"]:
+		if is_instance_valid(platform_navigation_graph) and platform_navigation_graph.has_method("toggle_debug_draw"):
+			platform_navigation_graph.toggle_debug_draw()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
+		return
+	if cmd_name in ["NAV", "NAV_STATUS"]:
+		if is_instance_valid(platform_navigation_graph) and platform_navigation_graph.has_method("print_current_nav_summary"):
+			platform_navigation_graph.print_current_nav_summary()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
+		return
+
 
 
 

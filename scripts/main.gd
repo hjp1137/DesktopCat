@@ -8,6 +8,7 @@ const SurfaceWorldModelClass = preload("res://scripts/world/surface_world_model.
 const UIElementWorldModelClass = preload("res://scripts/world/ui_element_world_model.gd")
 const VisualWorldModelClass = preload("res://scripts/world/visual_world_model.gd")
 const SurfaceFusionBuilderClass = preload("res://scripts/world/surface_fusion_builder.gd")
+const PlatformNavigationGraphClass = preload("res://scripts/navigation/platform_navigation_graph.gd")
 
 @onready var cat: Node2D = $Cat
 var command_manager: CommandManager = null
@@ -19,9 +20,12 @@ var surface_world_model: Node2D = null
 var ui_element_world_model: Node2D = null
 var visual_world_model: Node2D = null
 var surface_fusion_builder: Node2D = null
+var platform_navigation_graph: RefCounted = null
 var current_target_screen: int = 0
 
+
 func _ready() -> void:
+
 
 
 
@@ -67,9 +71,15 @@ func _ready() -> void:
 	surface_fusion_builder.cat = cat
 	add_child(surface_fusion_builder)
 
+	platform_navigation_graph = PlatformNavigationGraphClass.new(cat)
+	platform_navigation_graph.surface_world_model = surface_world_model
+	add_child(platform_navigation_graph.create_drawer())
+
+
 	window_world_model.window_world_updated.connect(func(_r): surface_fusion_builder.request_fusion())
 	ui_element_world_model.ui_world_updated.connect(func(_r): surface_fusion_builder.request_fusion())
 	visual_world_model.visual_world_updated.connect(func(_r): surface_fusion_builder.request_fusion())
+	surface_world_model.surface_world_updated.connect(func(_r): platform_navigation_graph.request_rebuild())
 	_on_window_world_updated(0)
 	
 	external_bridge = ExternalBridgeClass.new()
@@ -81,8 +91,10 @@ func _ready() -> void:
 	external_bridge.set("ui_element_world_model", ui_element_world_model)
 	external_bridge.set("visual_world_model", visual_world_model)
 	external_bridge.set("surface_fusion_builder", surface_fusion_builder)
+	external_bridge.set("platform_navigation_graph", platform_navigation_graph)
 
 	add_child(external_bridge)
+
 
 
 
@@ -180,6 +192,15 @@ func _handle_key_event(event: InputEventKey) -> bool:
 			if surface_fusion_builder and surface_fusion_builder.has_method("toggle_debug_diagnostics"):
 				surface_fusion_builder.toggle_debug_diagnostics()
 			return true
+		KEY_F14, KEY_G:
+			if platform_navigation_graph and platform_navigation_graph.has_method("toggle_debug_draw"):
+				platform_navigation_graph.toggle_debug_draw()
+			return true
+		KEY_T:
+			if platform_navigation_graph and platform_navigation_graph.has_method("print_current_nav_summary"):
+				platform_navigation_graph.print_current_nav_summary()
+			return true
+
 
 		KEY_C: if mouse_perception_controller and mouse_perception_controller.has_method("toggle_debug_follow"): mouse_perception_controller.toggle_debug_follow(); return true
 		KEY_1: command_manager.send_command(CommandManager.CatCommand.STOP); return true

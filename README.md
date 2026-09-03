@@ -25,7 +25,7 @@
 - **物理调试渲染 (F10)**：红点显示脚底接触点，高亮当前站立表面与状态 HUD；
 - **未实现项说明**：T13 尚未包含自主跳跃规划、抓边攀爬或路径寻路（由 T14~T17 实现）。
 
-### T14~T16：UI Automation、视觉几何与统一表面融合
+### T14~T17：UI Automation、视觉几何、统一表面融合与平台导航图
 - **T14**：纯原生 Windows UI Automation COM 感知，提取 Text/Button/Edit/Image 等结构化 UI 几何，支持 `F11` 调试；
 - **T15**：原生 GDI 轻量视觉几何感知，0.25 降采样与均值指纹变化检测，提取横线、竖线与矩形，支持 `F12` 调试；
 - **T16**：**统一表面融合系统 (Unified Surface Fusion & Simplification)**：
@@ -33,6 +33,11 @@
   - 实施优先级矩阵（Screen 100 > Window 90 > UIA 80 > Visual 60），自动过滤容器，合并同行文本片段，裁剪高 Z 窗口遮挡；
   - 80% 重叠去重并外扩并集，近共线合并，4px 网格坐标量化与 600ms 丢失 Grace 缓冲；
   - 原子提交至唯一 `SurfaceWorldModel`，使小猫天然在窗口文本、按钮、输入框、图片与视觉线条上行走与着陆！
+- **T17**：**平台导航图系统 (Platform Navigation Graph)**：
+  - 建立 `CatMovementCapabilities`，完全复用 Cat 真实物理参数推导动力学极值；
+  - 建立 `NavigationNode` 与 `NavigationEdge`，扣除半宽计算安全落地区间，区分 `JUMP_WALK`、`JUMP_RUN`、`DROP` 边；
+  - 实施空间初筛、One-Way 下落解判定与连续段相交检测（Swept Crossing Occlusion）；
+  - 支持 150ms Debounce 防抖原子提交与完整查询 API，支持 `F14`（免 Fn 键 `G` 切换、`T` 键输出）调试 HUD。
 
 ## 运行方式与快捷键
 
@@ -45,6 +50,7 @@
   - `F11` / `K` / `O` / `U`：切换【UI Automation 控件几何】调试线框
   - `F12` / `J`：切换【Visual Geometry 视觉几何】调试线框
   - `F13` / `H` / `Y`：切换【Unified Surface Fusion 融合诊断】HUD 视图
+  - `F14` / `G`：切换【Platform Navigation Graph 平台导航图】调试线框（按 `T` 输出当前导航摘要）
   - `TAB`：切换多显示器并重新生成表面与清理UI缓存
   - `C`：切换指针好奇跟随模式
   - `ESC` / `Alt + F4`：安全退出
@@ -54,4 +60,5 @@
   ```bash
   python tools/perception/perception_service.py
   ```
-  在控制台或桌面全局按 `F8`~`F12` 或免 Fn 键 `H`/`Y` 查看实时表面融合诊断！
+  在控制台或桌面全局按 `F8`~`F14` 或免 Fn 键 `G`/`T` 查看实时导航图与物理表面！
+

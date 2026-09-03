@@ -415,15 +415,124 @@ func _init() -> void:
 	assert(surf_model.surfaces_by_id.has("uia:btn1:top"), "在 Grace 保护期内丢失的表面仍应保留")
 	print("[PASS] 测试 34: 丢失 Grace 保护期验证成功")
 
+	# ========== T17 Platform Navigation Graph 单元测试 ==========
+	var CatMovementCapabilitiesClass = load("res://scripts/navigation/cat_movement_capabilities.gd")
+	var NavigationNodeClass = load("res://scripts/navigation/navigation_node.gd")
+	var NavigationEdgeClass = load("res://scripts/navigation/navigation_edge.gd")
+	var PlatformNavigationGraphClass = load("res://scripts/navigation/platform_navigation_graph.gd")
+
+	# 测试 35: CatMovementCapabilities 参数获取与理论弹道极值推导
+	var cap = CatMovementCapabilitiesClass.new(cat)
+	assert(absf(cap.gravity - 980.0) < 0.1, "Gravity 应为 980.0")
+	assert(absf(cap.jump_velocity - (-420.0)) < 0.1, "Jump Velocity 应为 -420.0")
+	var max_h = cap.get_max_jump_height()
+	assert(absf(max_h - 90.0) < 0.5, "理论最大跳高应约等于 90.0px")
+	var flight_t = cap.get_level_flight_time()
+	assert(absf(flight_t - 0.857) < 0.01, "同高水平飞行时间应约等于 0.857s")
+	var max_walk_d = cap.get_max_walk_jump_distance()
+	var max_run_d = cap.get_max_run_jump_distance()
+	assert(max_walk_d > 80.0 and max_walk_d < 110.0, "Walk 跳跃距离范围正确")
+	assert(max_run_d > 150.0 and max_run_d < 190.0, "Run 跳跃距离范围正确")
+	print("[PASS] 测试 35: CatMovementCapabilities 参数推导验证成功")
+
+	# 测试 36: 动力学方程 Landing Solution 与 One-Way 语义 (下落解有效，向上解排除)
+	var t_level = cap.calc_jump_landing_time(0.0)
+	assert(absf(t_level - flight_t) < 0.01, "水平平飞着陆时间与飞行时间一致")
+	var t_above = cap.calc_jump_landing_time(-50.0) # 目标高于起跳点 50px
+	assert(t_above > cap.get_time_to_apex(), "着陆解必须在顶点之后的下落阶段")
+	var t_too_high = cap.calc_jump_landing_time(-120.0) # 超出 90px 最大跳高
+	assert(t_too_high < 0.0, "超出最大跳高应当无有效解")
+	print("[PASS] 测试 36: 动力学方程 Landing Solution 与 One-Way 语义验证成功")
+
+	# 测试 37: NavigationNode 构建与安全落地区间 (扣除 Cat 半宽与裕量)
+	var surf_wide = SurfaceClass.new("surf_w", "w1", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 100.0, 200.0, 300.0, 200.0, true, true)
+	var node_wide = NavigationNodeClass.new(surf_wide, cap.landing_margin)
+	assert(node_wide.navigable == true, "宽平台应可导航")
+	assert(absf(node_wide.safe_x1 - (100.0 + cap.landing_margin)) < 0.1, "安全左边界正确扣除 margin")
+	assert(absf(node_wide.safe_x2 - (300.0 - cap.landing_margin)) < 0.1, "安全右边界正确扣除 margin")
+	var surf_narrow = SurfaceClass.new("surf_n", "w1", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 100.0, 200.0, 110.0, 200.0, true, true)
+	var node_narrow = NavigationNodeClass.new(surf_narrow, cap.landing_margin)
+	assert(node_narrow.navigable == false, "窄平台安全落地区间不足应标记为不可导航")
+	print("[PASS] 测试 37: NavigationNode 构建与安全落地区间验证成功")
+
+	# 测试 38: Walk Jump 与 Run Jump 区分识别
+	var nav_graph = PlatformNavigationGraphClass.new(cat)
+	nav_graph.surface_world_model = surf_model
+
+
+	# 构造 A 平台 (x: 100~300, y: 300)
+	var s_a = SurfaceClass.new("A", "wA", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 100.0, 300.0, 300.0, 300.0, true, true)
+	var n_a = NavigationNodeClass.new(s_a, cap.landing_margin)
+	# 构造 B 平台 (x: 350~500, y: 300)，间隙 50px (Walk 范围内)
+	var s_b = SurfaceClass.new("B", "wB", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 350.0, 300.0, 500.0, 300.0, true, true)
+	var n_b = NavigationNodeClass.new(s_b, cap.landing_margin)
+	var edge_ab = nav_graph._check_jump_edge(n_a, n_b, [s_a, s_b])
+	assert(edge_ab != null and edge_ab.action_type == NavigationEdgeClass.ActionType.JUMP_WALK, "间隙 50px 应识别为 JUMP_WALK")
+
+	# 构造 C 平台 (x: 430~600, y: 300)，间隙 130px (超出 Walk，在 Run 范围内)
+	var s_c = SurfaceClass.new("C", "wC", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 430.0, 300.0, 600.0, 300.0, true, true)
+	var n_c = NavigationNodeClass.new(s_c, cap.landing_margin)
+	var edge_ac = nav_graph._check_jump_edge(n_a, n_c, [s_a, s_c])
+	assert(edge_ac != null and edge_ac.action_type == NavigationEdgeClass.ActionType.JUMP_RUN, "间隙 130px 应识别为 JUMP_RUN")
+	print("[PASS] 测试 38: Walk Jump 与 Run Jump 区分识别验证成功")
+
+	# 测试 39: 不可达平台有效过滤 (超高、超远)
+	var s_too_high = SurfaceClass.new("H", "wH", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 350.0, 180.0, 500.0, 180.0, true, true)
+	var n_too_high = NavigationNodeClass.new(s_too_high, cap.landing_margin)
+	assert(nav_graph._check_jump_edge(n_a, n_too_high, [s_a, s_too_high]) == null, "超高目标(120px)应无法建立跳跃边")
+	var s_too_far = SurfaceClass.new("F", "wF", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 600.0, 300.0, 800.0, 300.0, true, true)
+	var n_too_far = NavigationNodeClass.new(s_too_far, cap.landing_margin)
+	assert(nav_graph._check_jump_edge(n_a, n_too_far, [s_a, s_too_far]) == null, "超远目标(300px)应无法建立跳跃边")
+	print("[PASS] 测试 39: 不可达平台有效过滤验证成功")
+
+	# 测试 40: 弹道轨迹中间平台拦截阻挡检测
+	var s_blocker = SurfaceClass.new("Blocker", "wB", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 300.0, 260.0, 460.0, 260.0, true, true)
+	var edge_blocked = nav_graph._check_jump_edge(n_a, n_c, [s_a, s_c, s_blocker])
+	assert(edge_blocked == null, "被中间平台拦截的弹道不应生成直接跳跃边")
+
+	print("[PASS] 测试 40: 弹道轨迹中间平台拦截阻挡检测验证成功")
+
+	# 测试 41: Drop 边判定与中间截断检测
+	var s_top = SurfaceClass.new("Top", "wT", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 100.0, 200.0, 300.0, 200.0, true, true)
+	var n_top = NavigationNodeClass.new(s_top, cap.landing_margin)
+	var s_bottom = SurfaceClass.new("Bottom", "wB", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 250.0, 500.0, 500.0, 500.0, true, true)
+	var n_bottom = NavigationNodeClass.new(s_bottom, cap.landing_margin)
+	var edge_drop = nav_graph._check_drop_edge(n_top, n_bottom, [s_top, s_bottom])
+	assert(edge_drop != null and edge_drop.action_type == NavigationEdgeClass.ActionType.DROP, "正下方无遮挡平台应生成 DROP 边")
+	var s_mid = SurfaceClass.new("Mid", "wM", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 280.0, 350.0, 400.0, 350.0, true, true)
+	var edge_drop_cut = nav_graph._check_drop_edge(n_top, n_bottom, [s_top, s_bottom, s_mid])
+	assert(edge_drop_cut == null, "中间存在更高承接表面时不应越级生成至底层平台的直接 DROP 边")
+	print("[PASS] 测试 41: Drop 边判定与中间截断检测验证成功")
+
+	# 测试 42: 全图原子重建与图查询 API
+	var s_ground = SurfaceClass.new("screen:ground", "screen", "SCREEN", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 0.0, 800.0, 1920.0, 800.0, true, false)
+	surf_model.surfaces_by_id = {
+
+		"Top": s_top, "Mid": s_mid, "Bottom": s_bottom, "screen:ground": s_ground
+	}
+	assert(nav_graph.rebuild_graph() == true, "全图重建应成功")
+	assert(nav_graph.nodes.size() == 4, "应注册 4 个导航节点")
+	assert(nav_graph.get_node("Top") != null, "get_node 返回正确")
+	var top_edges = nav_graph.get_edges_from("Top")
+	assert(top_edges.size() >= 1, "Top 应存在出度边")
+	var reachables = nav_graph.get_reachable_surfaces("Top")
+	assert(reachables.has("Mid"), "Top 应能到达 Mid")
+	assert(nav_graph.find_nearest_node(Vector2(110.0, 210.0)).surface_id == "Top", "最近节点查询正确")
+	print("[PASS] 测试 42: 全图原子重建与图查询 API 验证成功")
+
+
 	fusion_builder.queue_free()
+
 	vis_model.queue_free()
 	ui_model.queue_free()
 	surf_model.queue_free()
 	bridge.stop_server(); bridge.queue_free()
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
-	print("========== T16 Unified Surface Fusion 单元测试全部通过 ==========")
+	print("========== T17 Platform Navigation Graph 单元测试全部通过 ==========")
 	quit(0)
+
+
 
 
 

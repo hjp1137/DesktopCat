@@ -67,6 +67,9 @@ func _process(delta: float) -> bool:
 		var ev_f13 := InputEventKey.new(); ev_f13.keycode = KEY_H; ev_f13.pressed = true
 		main_scene._input(ev_f13)
 		assert(main_scene.surface_fusion_builder.debug_diagnostics_enabled == true, "F13/H 应成功开启 Fusion Diagnostics")
+		var ev_f14 := InputEventKey.new(); ev_f14.keycode = KEY_G; ev_f14.pressed = true
+		main_scene._input(ev_f14)
+		assert(main_scene.platform_navigation_graph.debug_draw_enabled == true, "F14/G 应成功开启 Nav Graph Debug")
 
 		print("========== 阶段 4c: 验证小猫下落着陆到 Chrome 顶边 ==========")
 		main_scene.cat.position = Vector2(400.0, 100.0)
@@ -80,9 +83,13 @@ func _process(delta: float) -> bool:
 		assert(main_scene.cat.is_grounded == true, "小猫下落后应当着陆")
 		assert(main_scene.cat.current_surface_id == "0x30094:top", "应当着陆在 Chrome 顶边 0x30094:top")
 		assert(absf(main_scene.cat.position.y - 150.0) <= 4.0, "着陆点 Y 坐标应在 Chrome 顶边 4px 量化容差范围内")
+		assert(main_scene.platform_navigation_graph.nodes.size() > 0, "导航图应当拥有节点")
+		var chrome_edges = main_scene.platform_navigation_graph.get_edges_from("0x30094:top")
+		print("[Integration] Chrome 顶边导航出度边数量: %d" % chrome_edges.size())
 
 		print("========== 阶段 5: 断开连接 ==========")
 		tcp_client.disconnect_from_host()
+
 		tcp_client = null
 
 	elif step_idx == 5 and elapsed_time > 2.2:

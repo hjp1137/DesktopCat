@@ -300,6 +300,20 @@ class WindowPerceptionService:
                 print(f"[Perception] 检测到快捷键 [{name}]，切换【Unified Surface Fusion 融合诊断】调试线框...")
                 self._send_msg({"v": 1, "type": "command", "name": "TOGGLE_DEBUG_FUSION"})
                 self._recv_line()
+        hotkeys_nav = {0x47: "G", 0x54: "T"}
+        for vk, name in hotkeys_nav.items():
+            is_down = bool(user32.GetAsyncKeyState(vk) & 0x8000)
+            was_down = self.hotkey_states.get(vk, False)
+            self.hotkey_states[vk] = is_down
+            if is_down and not was_down:
+                if name == "G":
+                    print(f"[Perception] 检测到快捷键 [{name}]，切换【Platform Navigation Graph 平台导航图】调试线框...")
+                    self._send_msg({"v": 1, "type": "command", "name": "TOGGLE_DEBUG_NAV"})
+                else:
+                    print(f"[Perception] 检测到快捷键 [{name}]，输出当前平台导航可达摘要...")
+                    self._send_msg({"v": 1, "type": "command", "name": "NAV"})
+                self._recv_line()
+
 
 
 

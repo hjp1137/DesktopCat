@@ -17,10 +17,15 @@
      ├─ [SurfaceWorldModel] (F9 物理表面，T12 顶边切分)
      ├─ [UIElementWorldModel] (F11 控件几何)
      └─ [VisualWorldModel] (F12 视觉线条与矩形)
-                  ↓ (T16 SurfaceFusionBuilder: Debounce / Dedup / Merge / Grace)
+                   ↓ (T16 SurfaceFusionBuilder: Debounce / Dedup / Merge / Grace)
 [SurfaceWorldModel (唯一物理世界入口)] (F9 物理表面，汇聚三路感知)
-                  ↓ (T13 Multi-Surface Physics: Swept Landing / One-Way / Move Follow)
-[Cat Physics & Behavior] (在窗口、按钮、文本、视觉线条上真实着陆与生活行走)
+                   ├─ (T13 Multi-Surface Physics: Swept Landing / One-Way / Move Follow)
+                   │    ↓
+                   │  [Cat Physics & Behavior] (在窗口、按钮、文本、视觉线条上真实着陆与生活行走)
+                   │
+                   └─ (T17 Platform Navigation Graph: 150ms Debounce / Ballistics / Swept Occlusion)
+                        ↓
+                      [PlatformNavigationGraph] (F14/G/T: JUMP_WALK, JUMP_RUN, DROP 有向可达图与查询 API)
 ```
 
 ## 3. 阶段演进规划
@@ -30,8 +35,7 @@
 4. **T14（已完成）**：Windows UI Automation 元素感知（UI Automation Element Perception）；
 5. **T15（已完成）**：轻量视觉几何感知（Lightweight Visual Geometry Perception）；
 6. **T16（已完成）**：统一表面融合与几何简化（Unified Surface Fusion & Simplification），通过 `SurfaceFusionBuilder` 建立唯一 `SurfaceWorldModel`，使小猫天然在文本、按钮、输入框、图片与视觉线条上行走与着陆；
-7. **T17**：导航图与跳跃规划系统 (Platform Navigation Graph & Jump Planning)；
-8. **T18**：抓边与攀爬系统 (Edge Grab + Climb)；
-9. **T19**：自主探索系统 (Autonomous Exploration)。
-
-
+7. **T17（已完成）**：平台导航图系统 (Platform Navigation Graph)，基于真实动力学构建有向图与查询接口；
+8. **T18**：跳跃决策与动作执行系统 (Jump Decision & Execution)；
+9. **T19**：抓边与攀爬系统 (Edge Grab + Climb)；
+10. **T20**：自主探索系统 (Autonomous Exploration)。
