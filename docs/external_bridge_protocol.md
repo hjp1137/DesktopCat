@@ -96,3 +96,60 @@ T11 正式引入的顶层窗口几何快照：
 {"v":1,"type":"surface_snapshot","revision":1,"surfaces":[]}
 ```
 
+### 4.8 UI_SNAPSHOT (T14 Client -> Server)
+通过 Windows UI Automation 提取的可见 UI 控件几何数据：
+```json
+{
+  "v": 1,
+  "type": "ui_snapshot",
+  "revision": 3,
+  "screen": { "index": 0, "width": 2880, "height": 1812 },
+  "elements": [
+    {
+      "id": "0x30094:btn_submit",
+      "window_id": "0x30094",
+      "control_type": "Button",
+      "name": "Submit",
+      "x": 250.0,
+      "y": 160.0,
+      "width": 90.0,
+      "height": 32.0
+    }
+  ]
+}
+```
+
+### 4.9 VISUAL_SNAPSHOT (T15 Client -> Server)
+通过原生 GDI 抓屏与降采样灰度梯度提取的纯几何 LINE 与 RECT：
+```json
+{
+  "v": 1,
+  "type": "visual_snapshot",
+  "revision": 1,
+  "screen": { "index": 0, "width": 2880, "height": 1812 },
+  "geometries": [
+    {
+      "id": "vg_lh_610_420_960",
+      "type": "LINE",
+      "orientation": "HORIZONTAL",
+      "x1": 420.0,
+      "y1": 610.0,
+      "x2": 960.0,
+      "y2": 610.0
+    },
+    {
+      "id": "vg_rect_420_1100_400_280",
+      "type": "RECT",
+      "x": 1100.0,
+      "y": 420.0,
+      "width": 400.0,
+      "height": 280.0
+    }
+  ]
+}
+```
+- **限制约束**：单次最多 300 个几何 (`MAX_VISUAL_GEOMETRIES = 300`)；
+- **纯轻量几何**：禁止传输原图或任何 Bitmap 像素流，仅传输矢量几何数据；
+- **非物理性**：T15 视觉几何仅供 VisualWorldModel 存储与 F12 调试呈现，严禁直接生成 Surface 物理碰撞（留待 T16 Fusion）。
+
+

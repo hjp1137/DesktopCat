@@ -47,9 +47,10 @@
   ```bash
   python tools/perception/ui_automation_perception.py
   ```
-- **统一多 Provider 感知调度器**：
+- **统一多 Provider 感知调度器 (Window + UIA + Visual)**：
   ```bash
   python tools/perception/perception_service.py
   ```
-按 `F8` 查看窗口，`F9` 查看物理表面，`F10` 查看小猫接触点，`F11` 查看 Windows 窗口内部 UI 控件几何！
+按 `F8` 查看窗口，`F9` 查看物理表面，`F10` 查看小猫接触点，`F11` 查看 Windows 窗口内部 UI 控件几何，按 `F12`（或免Fn键 `J`）查看纯视觉几何线框（水平线暖橙、垂直线金黄、矩形紫红）！
+
 

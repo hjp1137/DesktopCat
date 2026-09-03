@@ -271,13 +271,74 @@ func _init() -> void:
 	assert(ui_model.debug_draw_enabled == false, "再次 toggle 后 Debug Draw 应关闭")
 	print("[PASS] 测试 22: F11 调试开关验证成功")
 
+	# ========== T15 Lightweight Visual Geometry Perception 单元测试 ==========
+	var VisualWorldModelClass = load("res://scripts/world/visual_world_model.gd")
+	var vis_model = VisualWorldModelClass.new()
+	root.add_child(vis_model)
+	bridge.visual_world_model = vis_model
+
+	# 测试 23: visual_snapshot 接收与几何解析
+	var sample_vis_snap = {
+		"v": 1,
+		"type": "visual_snapshot",
+		"revision": 1,
+		"screen": {"index": 0, "width": 1920, "height": 1080},
+		"geometries": [
+			{"id": "vg_lh_1", "type": "LINE", "orientation": "HORIZONTAL", "x1": 100.0, "y1": 300.0, "x2": 400.0, "y2": 300.0},
+			{"id": "vg_lv_1", "type": "LINE", "orientation": "VERTICAL", "x1": 100.0, "y1": 300.0, "x2": 100.0, "y2": 500.0},
+			{"id": "vg_rect_1", "type": "RECT", "x": 200.0, "y": 200.0, "width": 150.0, "height": 100.0}
+		]
+	}
+	assert(vis_model.update_from_snapshot(sample_vis_snap) == true, "视觉快照应更新成功")
+	assert(vis_model.geometries_by_id.size() == 3, "应解析出 3 个有效几何")
+	assert(vis_model.geometries_by_id["vg_lh_1"].type == "LINE" and vis_model.geometries_by_id["vg_lh_1"].orientation == "HORIZONTAL", "水平线解析正确")
+	assert(vis_model.geometries_by_id["vg_rect_1"].type == "RECT" and vis_model.geometries_by_id["vg_rect_1"].rect == Rect2(200.0, 200.0, 150.0, 100.0), "矩形解析正确")
+	print("[PASS] 测试 23: 视觉快照接收与几何解析验证成功")
+
+	# 测试 24: 视觉版本防倒退
+	var old_vis_snap = {"v": 1, "type": "visual_snapshot", "revision": 1, "geometries": []}
+	assert(vis_model.update_from_snapshot(old_vis_snap) == false, "旧或相同版本号快照应当被忽略")
+	assert(vis_model.geometries_by_id.size() == 3, "几何数据不应被倒退版本覆盖")
+	print("[PASS] 测试 24: 视觉版本防倒退验证成功")
+
+	# 测试 25: 非法数值与无效几何过滤 (NaN, Inf, 负尺寸)
+	var invalid_vis_snap = {
+		"v": 1, "type": "visual_snapshot", "revision": 2,
+		"geometries": [
+			{"id": "vg_valid", "type": "LINE", "orientation": "HORIZONTAL", "x1": 50.0, "y1": 50.0, "x2": 250.0, "y2": 50.0},
+			{"id": "vg_bad_rect", "type": "RECT", "x": 10.0, "y": 10.0, "width": -5.0, "height": 20.0},
+			{"id": "vg_bad_line", "type": "LINE", "orientation": "VERTICAL", "x1": NAN, "y1": 0.0, "x2": 0.0, "y2": 100.0}
+		]
+	}
+	assert(vis_model.update_from_snapshot(invalid_vis_snap) == true, "新版本快照应更新成功")
+	assert(vis_model.geometries_by_id.has("vg_valid") and not vis_model.geometries_by_id.has("vg_bad_rect") and not vis_model.geometries_by_id.has("vg_bad_line"), "非法几何应被过滤")
+	print("[PASS] 测试 25: 非法数值与无效几何过滤验证成功")
+
+	# 测试 26: 视觉几何分类与空间查询 API
+	var all_lines = vis_model.get_lines()
+	var h_lines = vis_model.get_horizontal_lines()
+	var v_lines = vis_model.get_vertical_lines()
+	var near_geoms = vis_model.get_geometries_near(Vector2(150.0, 50.0), 30.0)
+	assert(all_lines.size() == 1 and h_lines.size() == 1 and v_lines.size() == 0 and near_geoms.size() == 1, "分类与空间查询返回正确")
+	print("[PASS] 测试 26: 视觉几何分类与空间查询 API 验证成功")
+
+	# 测试 27: F12 调试开关
+	assert(vis_model.debug_draw_enabled == false, "默认 Debug Draw 为关闭")
+	vis_model.toggle_debug_draw()
+	assert(vis_model.debug_draw_enabled == true, "toggle 后 Debug Draw 应开启")
+	vis_model.toggle_debug_draw()
+	assert(vis_model.debug_draw_enabled == false, "再次 toggle 后 Debug Draw 应关闭")
+	print("[PASS] 测试 27: F12 调试开关验证成功")
+
+	vis_model.queue_free()
 	ui_model.queue_free()
 	surf_model.queue_free()
 	bridge.stop_server(); bridge.queue_free()
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
-	print("========== T14 UI Automation Perception 单元测试全部通过 ==========")
+	print("========== T15 Visual Geometry Perception 单元测试全部通过 ==========")
 	quit(0)
+
 
 
 

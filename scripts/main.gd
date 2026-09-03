@@ -6,6 +6,7 @@ const ExternalBridgeClass = preload("res://scripts/external_bridge.gd")
 const WindowWorldModelClass = preload("res://scripts/world/window_world_model.gd")
 const SurfaceWorldModelClass = preload("res://scripts/world/surface_world_model.gd")
 const UIElementWorldModelClass = preload("res://scripts/world/ui_element_world_model.gd")
+const VisualWorldModelClass = preload("res://scripts/world/visual_world_model.gd")
 
 @onready var cat: Node2D = $Cat
 var command_manager: CommandManager = null
@@ -15,9 +16,11 @@ var external_bridge: Node = null
 var window_world_model: Node2D = null
 var surface_world_model: Node2D = null
 var ui_element_world_model: Node2D = null
+var visual_world_model: Node2D = null
 var current_target_screen: int = 0
 
 func _ready() -> void:
+
 
 	print("[Main] DesktopCat 启动中...")
 	command_manager = CommandManager.new()
@@ -52,6 +55,9 @@ func _ready() -> void:
 	ui_element_world_model = UIElementWorldModelClass.new()
 	add_child(ui_element_world_model)
 	
+	visual_world_model = VisualWorldModelClass.new()
+	add_child(visual_world_model)
+	
 	external_bridge = ExternalBridgeClass.new()
 	external_bridge.set("command_manager", command_manager)
 	external_bridge.set("cat", cat)
@@ -59,8 +65,10 @@ func _ready() -> void:
 	external_bridge.set("window_world_model", window_world_model)
 	external_bridge.set("surface_world_model", surface_world_model)
 	external_bridge.set("ui_element_world_model", ui_element_world_model)
+	external_bridge.set("visual_world_model", visual_world_model)
 
 	add_child(external_bridge)
+
 
 	
 	if DisplayServer.get_name() != "headless":
@@ -103,7 +111,10 @@ func _apply_screen_layout(screen_idx: int) -> void:
 		surface_world_model.clear_surfaces()
 	if ui_element_world_model and ui_element_world_model.has_method("clear_elements"):
 		ui_element_world_model.clear_elements()
+	if visual_world_model and visual_world_model.has_method("clear_geometries"):
+		visual_world_model.clear_geometries()
 	_on_window_world_updated(0)
+
 
 	if is_instance_valid(cat) and cat.has_method("reset_to_ground"):
 		cat.reset_to_ground(Vector2(screen_size.x / 2.0, screen_size.y - 48.0)); update_mouse_passthrough(cat.position)
@@ -145,6 +156,11 @@ func _handle_key_event(event: InputEventKey) -> bool:
 			if ui_element_world_model and ui_element_world_model.has_method("toggle_debug_draw"):
 				ui_element_world_model.toggle_debug_draw()
 			return true
+		KEY_F12, KEY_J:
+			if visual_world_model and visual_world_model.has_method("toggle_debug_draw"):
+				visual_world_model.toggle_debug_draw()
+			return true
+
 
 
 

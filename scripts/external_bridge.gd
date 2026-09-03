@@ -36,8 +36,10 @@ var main_node: Node2D = null
 var window_world_model: Node = null
 var surface_world_model: Node = null
 var ui_element_world_model: Node = null
+var visual_world_model: Node = null
 
 func _ready() -> void:
+
 
 	start_server(port)
 
@@ -163,8 +165,10 @@ func _handle_raw_message(msg_str: String) -> void:
 		"command": _handle_command_message(data)
 		"window_snapshot": _handle_window_snapshot(data)
 		"ui_snapshot": _handle_ui_snapshot(data)
+		"visual_snapshot": _handle_visual_snapshot(data)
 		"surface_snapshot": _send_error("NOT_IMPLEMENTED", "Surface snapshots are reserved for future versions")
 		_: _send_error("UNKNOWN_TYPE", "Unknown message type: " + mtype)
+
 
 
 func _handle_window_snapshot(data: Dictionary) -> void:
@@ -204,6 +208,16 @@ func _handle_ui_snapshot(data: Dictionary) -> void:
 	else:
 		_send_error("IGNORED_SNAPSHOT", "Snapshot rejected or outdated revision")
 
+func _handle_visual_snapshot(data: Dictionary) -> void:
+	if not is_instance_valid(visual_world_model) or not visual_world_model.has_method("update_from_snapshot"):
+		_send_error("SERVICE_UNAVAILABLE", "VisualWorldModel not initialized")
+		return
+	var ok: bool = visual_world_model.update_from_snapshot(data)
+	if ok:
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "action": "visual_snapshot", "revision": int(data.get("revision", 0))})
+	else:
+		_send_error("IGNORED_SNAPSHOT", "Snapshot rejected or outdated revision")
+
 func _handle_command_message(data: Dictionary) -> void:
 	var cmd_name := str(data.get("name", "")).to_upper()
 	if cmd_name == "TOGGLE_DEBUG_WINDOWS":
@@ -226,6 +240,12 @@ func _handle_command_message(data: Dictionary) -> void:
 			ui_element_world_model.toggle_debug_draw()
 		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
 		return
+	if cmd_name in ["TOGGLE_DEBUG_VISUAL", "TOGGLE_DEBUG_VISUAL_GEOMETRY"]:
+		if is_instance_valid(visual_world_model) and visual_world_model.has_method("toggle_debug_draw"):
+			visual_world_model.toggle_debug_draw()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
+		return
+
 
 
 

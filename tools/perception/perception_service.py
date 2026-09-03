@@ -10,6 +10,7 @@ import sys
 
 from tools.perception.window_perception import WindowPerceptionService
 from tools.perception.ui_automation_perception import UIAutomationPerceptionService
+from tools.perception.visual_perception import VisualPerceptionService
 
 def run_window_service():
     print("[UnifiedPerception] Starting WindowPerceptionService...")
@@ -27,19 +28,31 @@ def run_uia_service():
     except Exception as e:
         print(f"[UnifiedPerception] UIAutomationPerceptionService exited: {e}")
 
+def run_visual_service():
+    print("[UnifiedPerception] Starting VisualPerceptionService...")
+    svc = VisualPerceptionService()
+    try:
+        svc.run()
+    except Exception as e:
+        print(f"[UnifiedPerception] VisualPerceptionService exited: {e}")
+
 def main():
     print("==================================================")
-    print("DesktopCat - Unified Perception Service (T14)")
-    print("同时托管: Window Geometry (10Hz) + UI Automation (2Hz)")
-    print("全局快捷键: [F8] 窗口 | [F9] 物理表面 | [F10] 物理接触点 | [F11] UI控件")
+    print("DesktopCat - Unified Perception Service (T15)")
+    print("同时托管: Window (10Hz) + UIA (2Hz) + Visual (2Hz)")
+    print("全局快捷键: [F8] 窗口 | [F9] 物理表面 | [F10] 接触点 | [F11] UI控件 | [F12] 视觉几何")
     print("==================================================")
     
     t_win = threading.Thread(target=run_window_service, daemon=True)
     t_uia = threading.Thread(target=run_uia_service, daemon=True)
+    t_vis = threading.Thread(target=run_visual_service, daemon=True)
     
     t_win.start()
     time.sleep(0.2)
     t_uia.start()
+    time.sleep(0.2)
+    t_vis.start()
+
     
     try:
         while True:
