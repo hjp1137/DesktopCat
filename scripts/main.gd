@@ -3,12 +3,14 @@ extends Node2D
 const MouseControllerClass = preload("res://scripts/mouse_controller.gd")
 const MousePerceptionControllerClass = preload("res://scripts/mouse_perception_controller.gd")
 const ExternalBridgeClass = preload("res://scripts/external_bridge.gd")
+const WindowWorldModelClass = preload("res://scripts/world/window_world_model.gd")
 
 @onready var cat: Node2D = $Cat
 var command_manager: CommandManager = null
 var mouse_controller: Node = null
 var mouse_perception_controller: Node = null
 var external_bridge: Node = null
+var window_world_model: Node2D = null
 var current_target_screen: int = 0
 
 func _ready() -> void:
@@ -30,16 +32,21 @@ func _ready() -> void:
 	mouse_perception_controller.set("main_node", self)
 	add_child(mouse_perception_controller)
 	
+	window_world_model = WindowWorldModelClass.new()
+	add_child(window_world_model)
+	
 	external_bridge = ExternalBridgeClass.new()
 	external_bridge.set("command_manager", command_manager)
 	external_bridge.set("cat", cat)
 	external_bridge.set("main_node", self)
+	external_bridge.set("window_world_model", window_world_model)
 	add_child(external_bridge)
 	
 	if DisplayServer.get_name() != "headless":
 		current_target_screen = get_window().current_screen
 		if current_target_screen < 0: current_target_screen = DisplayServer.window_get_current_screen()
 	_setup_transparent_overlay()
+
 
 func _setup_transparent_overlay() -> void:
 	RenderingServer.set_default_clear_color(Color(0, 0, 0, 0))
@@ -69,6 +76,8 @@ func _apply_screen_layout(screen_idx: int) -> void:
 		screen_pos = DisplayServer.screen_get_position(screen_idx); screen_size = DisplayServer.screen_get_size(screen_idx) - Vector2i(0, 1)
 	print("[Main] 切换/应用屏幕 ID: %d, 位置=%s, 尺寸=%s" % [screen_idx, screen_pos, screen_size])
 	window.position = screen_pos; window.size = screen_size
+	if window_world_model and window_world_model.has_method("clear_windows"):
+		window_world_model.clear_windows()
 	if is_instance_valid(cat) and cat.has_method("reset_to_ground"):
 		cat.reset_to_ground(Vector2(screen_size.x / 2.0, screen_size.y - 48.0)); update_mouse_passthrough(cat.position)
 
@@ -84,6 +93,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		match event.keycode:
 			KEY_ESCAPE: print("[Main] 接收到 ESC 键，安全退出。"); get_tree().quit()
 			KEY_TAB: _apply_screen_layout((current_target_screen + 1) % DisplayServer.get_screen_count())
+			KEY_F8: if window_world_model and window_world_model.has_method("toggle_debug_draw"): window_world_model.toggle_debug_draw()
 			KEY_C: if mouse_perception_controller and mouse_perception_controller.has_method("toggle_debug_follow"): mouse_perception_controller.toggle_debug_follow()
 			KEY_1: command_manager.send_command(CommandManager.CatCommand.STOP)
 			KEY_2: command_manager.send_command(CommandManager.CatCommand.WALK_LEFT)
@@ -99,9 +109,17 @@ func _unhandled_input(event: InputEvent) -> void:
 func get_overlay_info() -> Dictionary:
 	var window := get_window()
 	var sz: Vector2i = window.size if window else Vector2i(1920, 1080)
+	var pos: Vector2i = window.position if window else Vector2i.ZERO
+	var wh: String = ""
+	if DisplayServer.get_name() != "headless":
+		var handle = DisplayServer.window_get_native_handle(DisplayServer.WINDOW_HANDLE)
+		wh = "0x%X" % handle
 	return {
 		"screen_index": current_target_screen,
+		"screen_pos": pos,
 		"width": sz.x,
-		"height": sz.y
+		"height": sz.y,
+		"window_handle": wh
 	}
+
 

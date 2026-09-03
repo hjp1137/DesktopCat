@@ -6,6 +6,7 @@ const BIND_ADDRESS: String = "127.0.0.1"
 const PROTOCOL_VERSION: int = 1
 const MAX_MESSAGE_SIZE: int = 262144
 const MAX_BUFFER_SIZE: int = 524288
+const MAX_WINDOWS: int = 256
 
 const ALLOWED_COMMANDS: Dictionary = {
 	"STOP": CommandManager.CatCommand.STOP,
@@ -30,6 +31,8 @@ var input_buffer: PackedByteArray = PackedByteArray()
 var command_manager: CommandManager = null
 var cat: Node2D = null
 var main_node: Node2D = null
+var window_world_model: Node = null
+
 
 func _ready() -> void:
 	start_server(port)
@@ -84,8 +87,11 @@ func _cleanup_client(reason: String = "") -> void:
 		client.disconnect_from_host()
 		client = null
 	input_buffer.clear()
+	if is_instance_valid(window_world_model) and window_world_model.has_method("clear_windows"):
+		window_world_model.clear_windows()
 	if reason != "":
 		print("[Bridge] %s" % reason)
+
 
 func _process_input_buffer() -> void:
 	while true:
@@ -117,8 +123,36 @@ func _handle_raw_message(msg_str: String) -> void:
 		"ping": _send_pong()
 		"get_status": _send_status()
 		"command": _handle_command_message(data)
+		"window_snapshot": _handle_window_snapshot(data)
 		"surface_snapshot": _send_error("NOT_IMPLEMENTED", "Surface snapshots are reserved for future versions")
 		_: _send_error("UNKNOWN_TYPE", "Unknown message type: " + mtype)
+
+func _handle_window_snapshot(data: Dictionary) -> void:
+	var raw_windows = data.get("windows", null)
+	if typeof(raw_windows) != TYPE_ARRAY:
+		_send_error("INVALID_SNAPSHOT", "windows must be an array")
+		return
+	if raw_windows.size() > MAX_WINDOWS:
+		_send_error("TOO_MANY_WINDOWS", "Exceeded MAX_WINDOWS (%d)" % MAX_WINDOWS)
+		return
+	for item in raw_windows:
+		if typeof(item) != TYPE_DICTIONARY:
+			_send_error("INVALID_SNAPSHOT", "Window item must be an object")
+			return
+		if not item.has("id") or not item.has("x") or not item.has("y") or not item.has("width") or not item.has("height"):
+			_send_error("INVALID_SNAPSHOT", "Missing window fields")
+			return
+		var x = item.get("x"); var y = item.get("y"); var w = item.get("width"); var h = item.get("height")
+		if not (x is int or x is float) or not (y is int or y is float) or not (w is int or w is float) or not (h is int or h is float):
+			_send_error("INVALID_SNAPSHOT", "Window rect fields must be numbers")
+			return
+		if is_nan(x) or is_nan(y) or is_nan(w) or is_nan(h) or is_inf(x) or is_inf(y) or is_inf(w) or is_inf(h) or w <= 0.0 or h <= 0.0:
+			_send_error("INVALID_SNAPSHOT", "Window rect must be valid positive finite numbers")
+			return
+	if is_instance_valid(window_world_model) and window_world_model.has_method("apply_snapshot"):
+		window_world_model.apply_snapshot(data)
+	var rev: int = int(data.get("revision", 0))
+	_send_json({"v": PROTOCOL_VERSION, "type": "ok", "action": "window_snapshot", "revision": rev})
 
 func _handle_command_message(data: Dictionary) -> void:
 	var cmd_name := str(data.get("name", "")).to_upper()
@@ -145,7 +179,8 @@ func _handle_command_message(data: Dictionary) -> void:
 
 func _send_hello() -> void:
 	var info := _get_overlay_info()
-	_send_json({"v": PROTOCOL_VERSION, "type": "hello", "app": "DesktopCat", "bridge_version": PROTOCOL_VERSION, "screen_index": info.screen_index, "overlay": {"width": info.width, "height": info.height}})
+	var rev: int = window_world_model.latest_revision if is_instance_valid(window_world_model) else 0
+	_send_json({"v": PROTOCOL_VERSION, "type": "hello", "app": "DesktopCat", "bridge_version": PROTOCOL_VERSION, "latest_revision": rev, "screen": {"index": info.screen_index, "x": info.screen_pos.x, "y": info.screen_pos.y, "width": info.width, "height": info.height}, "overlay": {"width": info.width, "height": info.height}, "window_handle": info.window_handle})
 
 func _send_pong() -> void:
 	_send_json({"v": PROTOCOL_VERSION, "type": "pong"})
@@ -161,7 +196,10 @@ func _send_status() -> void:
 		if md != null and md >= 0 and md < Cat.ControlMode.size():
 			c_mode = Cat.ControlMode.keys()[md]
 	var info := _get_overlay_info()
-	_send_json({"v": PROTOCOL_VERSION, "type": "status", "cat_state": c_state, "control_mode": c_mode, "screen_index": info.screen_index, "overlay": {"width": info.width, "height": info.height}, "bridge_connected": true})
+	var rev: int = window_world_model.latest_revision if is_instance_valid(window_world_model) else 0
+	_send_json({"v": PROTOCOL_VERSION, "type": "status", "cat_state": c_state, "control_mode": c_mode, "latest_revision": rev, "screen": {"index": info.screen_index, "x": info.screen_pos.x, "y": info.screen_pos.y, "width": info.width, "height": info.height}, "overlay": {"width": info.width, "height": info.height}, "window_handle": info.window_handle, "bridge_connected": true})
+
+
 
 func _send_error(code: String, message: String) -> void:
 	_send_json({"v": PROTOCOL_VERSION, "type": "error", "code": code, "message": message})
@@ -174,9 +212,12 @@ func _send_json(dict: Dictionary) -> void:
 
 func _get_overlay_info() -> Dictionary:
 	var s_idx: int = 0
+	var s_pos := Vector2i.ZERO
 	var w: int = 1920
 	var h: int = 1080
+	var wh: String = ""
 	if is_instance_valid(main_node) and main_node.has_method("get_overlay_info"):
 		return main_node.get_overlay_info()
-	return {"screen_index": s_idx, "width": w, "height": h}
+	return {"screen_index": s_idx, "screen_pos": s_pos, "width": w, "height": h, "window_handle": wh}
+
 

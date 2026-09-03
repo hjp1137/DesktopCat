@@ -6,7 +6,7 @@ var step_idx: int = 0
 var tcp_client: StreamPeerTCP = null
 
 func _init() -> void:
-	print("========== 开始执行 T10 主场景与 ExternalBridge 集成测试 ==========")
+	print("========== 开始执行 T11 主场景与 WindowWorldModel 集成测试 ==========")
 	var scene_res = load("res://scenes/main.tscn")
 	if not scene_res: printerr("无法加载主场景 res://scenes/main.tscn"); quit(1); return
 	main_scene = scene_res.instantiate()
@@ -33,18 +33,26 @@ func _process(delta: float) -> bool:
 
 	elif step_idx == 2 and elapsed_time > 0.9:
 		step_idx = 3
-		print("========== 阶段 3: 发送外部 JUMP 指令 ==========")
-		tcp_client.put_data("{\"v\":1,\"type\":\"command\",\"name\":\"JUMP\",\"payload\":{}}\n".to_utf8_buffer())
+		print("========== 阶段 3: 发送 window_snapshot 快照 ==========")
+		var snap_str := "{\"v\":1,\"type\":\"window_snapshot\",\"revision\":1,\"screen\":{\"index\":0,\"width\":1920,\"height\":1080},\"windows\":[{\"id\":\"0x30094\",\"title\":\"Chrome\",\"x\":200.0,\"y\":150.0,\"width\":1000.0,\"height\":700.0,\"is_foreground\":true,\"z_order\":0}]}\n"
+		tcp_client.put_data(snap_str.to_utf8_buffer())
 
-	elif step_idx == 3 and elapsed_time > 1.4:
+	elif step_idx == 3 and elapsed_time > 1.3:
 		step_idx = 4
-		print("========== 阶段 4: 断开连接 ==========")
+		print("========== 阶段 4: 触发 F8 切换 Debug 绘制 ==========")
+		var ev_f8 := InputEventKey.new(); ev_f8.keycode = KEY_F8; ev_f8.pressed = true
+		main_scene._unhandled_input(ev_f8)
+		assert(main_scene.window_world_model.debug_draw_enabled == true, "F8 应成功开启 Debug 绘制")
+
+	elif step_idx == 4 and elapsed_time > 1.7:
+		step_idx = 5
+		print("========== 阶段 5: 断开连接 ==========")
 		tcp_client.disconnect_from_host()
 		tcp_client = null
 
-	elif step_idx == 4 and elapsed_time > 2.0:
-		step_idx = 5
-		print("========== 阶段 5: 触发 ESC 安全退出 ==========")
+	elif step_idx == 5 and elapsed_time > 2.2:
+		step_idx = 6
+		print("========== 阶段 6: 触发 ESC 安全退出 ==========")
 		var ev_esc := InputEventKey.new(); ev_esc.keycode = KEY_ESCAPE; ev_esc.pressed = true
 		main_scene._unhandled_input(ev_esc)
 		return true

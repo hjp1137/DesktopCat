@@ -59,8 +59,40 @@
 {"v":1,"type":"error","code":"UNKNOWN_COMMAND","message":"Command not allowed"}
 ```
 
-### 4.6 SURFACE_SNAPSHOT (预留)
-预留未来几何数据格式（当前版本接收后响应 `NOT_IMPLEMENTED` 错误）：
+### 4.6 WINDOW_SNAPSHOT (Client -> Server)
+T11 正式引入的顶层窗口几何快照：
+```json
+{
+  "v": 1,
+  "type": "window_snapshot",
+  "revision": 15,
+  "screen": {
+    "index": 0,
+    "width": 2880,
+    "height": 1812
+  },
+  "windows": [
+    {
+      "id": "0x000A17BC",
+      "title": "Google Chrome",
+      "class_name": "Chrome_WidgetWin_1",
+      "x": 320,
+      "y": 180,
+      "width": 1400,
+      "height": 850,
+      "is_foreground": true,
+      "z_order": 0
+    }
+  ]
+}
+```
+- **限制约束**：单次最多 256 个窗口 (`MAX_WINDOWS = 256`)；
+- **坐标定义**：必须为当前 Overlay 局部像素坐标，且已完成屏幕边界裁剪；
+- **非物理性**：T11 窗口几何仅供 WorldModel 数据存储与 F8 调试绘制，不直接生成物理碰撞。
+
+### 4.7 SURFACE_SNAPSHOT (预留)
+预留未来几何表面格式（当前版本接收后响应 `NOT_IMPLEMENTED` 错误）：
 ```json
 {"v":1,"type":"surface_snapshot","revision":1,"surfaces":[]}
 ```
+
