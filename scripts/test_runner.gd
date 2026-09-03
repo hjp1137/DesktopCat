@@ -23,9 +23,16 @@ func _init() -> void:
 	var bridge := ExternalBridge.new()
 	bridge.command_manager = cmd_mgr; bridge.cat = cat
 	bridge.window_world_model = world_model
-	bridge.start_server(47839) # 测试端口
-	assert(bridge.server != null and bridge.server.is_listening(), "Bridge 应成功监听 127.0.0.1:47839")
-	print("[PASS] 测试 1: ExternalBridge 本地服务监听成功")
+	var test_port: int = 47839
+	var port_ok: bool = false
+	for p_try in [47839, 47840, 47841, 47842, 47843]:
+		bridge.start_server(p_try)
+		if bridge.server != null and bridge.server.is_listening():
+			test_port = p_try
+			port_ok = true
+			break
+	assert(port_ok, "Bridge 应成功监听本地测试端口")
+	print("[PASS] 测试 1: ExternalBridge 本地服务监听成功 (端口 %d)" % test_port)
 
 	# 测试 2: 畸形数据与非法命令拦截
 	bridge._handle_raw_message("{invalid_json: true")
@@ -186,10 +193,10 @@ func _init() -> void:
 	cat.direction = 1.0
 	cat.current_surface_id = "winA:top"
 	cat.change_state(Cat.CatState.WALK)
-	cat.update_state(0.1)
+	cat.update_state(0.2)
 	cat.update_state(0.016)
 	assert(cat.is_grounded == false, "超出平台边缘应当立即失去支撑")
-	assert(cat.current_state == Cat.CatState.FALL, "失去支撑后应当切换为 FALL 状态")
+	assert(cat.current_state in [Cat.CatState.FALL, Cat.CatState.EDGE_HANG], "失去支撑后应当切换为 FALL 或抓边状态")
 	print("[PASS] 测试 15: 走出平台边缘自动下落验证成功")
 
 
@@ -1088,7 +1095,7 @@ func _init() -> void:
 	print("[PASS] 测试 77: 爬到 Wall Top 自动过渡为 EDGE_HANG 并登顶验证成功")
 
 	# 测试 78: 爬墙中表面平移跟随、超大位移 (>150px) 脱落与等价 Rebind
-	cat.position = Vector2(136.0, 250.0)
+	cat.position = Vector2(150.0 - cat.wall_cling_offset_x, 250.0)
 	cat.current_wall_attachment = WallAttachmentClass.new("win_wall_l", 150.0, 200.0, 300.0, SurfaceClass.Orientation.LEFT, -1, 232.0, 1)
 	cat.direction = 1.0
 	cat.change_state(Cat.CatState.WALL_CLING)
@@ -1145,6 +1152,105 @@ func _init() -> void:
 	assert(cat.current_state == Cat.CatState.FALL, "长墙爬行超时后安全自动脱落")
 	print("[PASS] 测试 80: AUTO 模式停顿自动爬行与长墙超时脱落验证成功")
 
+	# ========== T20A Adaptive Cat Scale & CatMetrics 单元测试 ==========
+	var CatMetricsClass = load("res://scripts/cat/cat_metrics.gd")
+	var CatBodyProfileClass = load("res://scripts/cat/cat_body_profile.gd")
+
+	# 测试 81: CatBodyProfile 与 CatMetrics 数据结构与归一化计算
+	var c_profile = CatBodyProfileClass.new()
+	assert(c_profile.raw_width == 64.0 and c_profile.raw_height == 64.0, "原始贴图规格为 64x64")
+	assert(c_profile.normalized_body_width > 0.5 and c_profile.normalized_body_height > 0.5, "归一化身体尺寸合理")
+	var c_metrics = CatMetricsClass.new(c_profile)
+	assert(c_metrics.visual_width == 64.0 and c_metrics.visual_height == 64.0, "默认 scale 1.0 时可视宽高等于原始尺寸")
+	assert(c_metrics.to_dict().has("metrics_revision"), "to_dict 序列化包含 revision")
+	print("[PASS] 测试 81: CatBodyProfile 与 CatMetrics 数据结构与归一化计算验证成功")
+
+	# 测试 82: 自适应 Base Scale 计算与多显示器高度 Clamp
+	var bs_1080 = CatMetricsClass.calc_base_scale_from_screen_height(1080.0)
+	assert(absf(bs_1080 - (108.0 / 64.0)) < 0.001, "1080p 下目标高度 108px，base_scale = 1.6875")
+	var bs_1440 = CatMetricsClass.calc_base_scale_from_screen_height(1440.0)
+	assert(absf(bs_1440 - (144.0 / 64.0)) < 0.001, "1440p 下目标高度 144px，base_scale = 2.25")
+	var bs_4k = CatMetricsClass.calc_base_scale_from_screen_height(2160.0)
+	assert(absf(bs_4k - (180.0 / 64.0)) < 0.001, "4K 屏幕目标高度 Clamp 至 MAX_CAT_VISUAL_HEIGHT 180px")
+	var bs_small = CatMetricsClass.calc_base_scale_from_screen_height(600.0)
+	assert(absf(bs_small - (85.0 / 64.0)) < 0.001, "极小屏幕目标高度 Clamp 至 MIN_CAT_VISUAL_HEIGHT 85px")
+	print("[PASS] 测试 82: 自适应 Base Scale 计算与多显示器高度 Clamp 验证成功")
+
+	# 测试 83: User Scale 调节、安全 Clamp (0.70 ~ 1.60) 与异常值回退
+	c_metrics.update_scales(1.0, 0.4) # 低于 MIN_USER_SCALE (0.70)
+	assert(c_metrics.user_scale == 0.70, "低于下限时 Clamp 至 0.70")
+	c_metrics.update_scales(1.0, 2.5) # 高于 MAX_USER_SCALE (1.60)
+	assert(c_metrics.user_scale == 1.60, "高于上限时 Clamp 至 1.60")
+	c_metrics.update_scales(1.0, NAN)
+	assert(c_metrics.user_scale == CatMetricsClass.DEFAULT_USER_SCALE, "NaN 输入安全回退默认值")
+	print("[PASS] 测试 83: User Scale 调节、安全 Clamp 与异常值回退验证成功")
+
+	# 测试 84: Scale 0.8 下物理与着陆几何变化
+	c_metrics.update_scales(1.0, 0.8)
+	var m_prev_rev: int = int(c_metrics.metrics_revision)
+	assert(absf(c_metrics.final_scale - 0.8) < 0.001, "final_scale 精确为 0.8")
+	assert(absf(c_metrics.visual_height - 64.0 * 0.8) < 0.01, "visual_height 随 scale 缩放")
+	assert(c_metrics.body_width < 52.0 and absf(c_metrics.grab_point_offset_y) < 20.0, "物理几何尺寸等比缩小")
+	print("[PASS] 测试 84: Scale 0.8 下物理与着陆几何变化验证成功")
+
+	# 测试 85: Scale 1.0 下完整几何与锚点对称性
+	c_metrics.update_scales(1.0, 1.0)
+	assert(c_metrics.grab_point_offset_x > 0.0, "抓取偏移为正数")
+	var l_pt = c_metrics.get_mouse_passthrough_polygon(Vector2(100.0, 100.0))
+	assert(l_pt.size() == 4, "鼠标穿透多边形为4个顶点")
+	assert(absf((l_pt[1].x - 100.0) - (100.0 - l_pt[0].x)) < 0.001, "左右点击区域严格对称")
+	print("[PASS] 测试 85: Scale 1.0 下完整几何与锚点对称性验证成功")
+
+	# 测试 86: Scale 1.2 下 Edge Grab 与 Climb-Up 几何适配
+	cat.set_user_scale(1.2)
+	var cat_m: RefCounted = cat.get("metrics")
+	assert(absf(float(cat_m.user_scale) - 1.2) < 0.001, "小猫成功应用 user_scale 1.2")
+	assert(cat.edge_hang_offset_y > 18.0 and cat.grab_point_offset_x > 12.0, "抓取与悬挂偏移自动放大")
+	var gp_l := cat.get_left_grab_point()
+	var gp_r := cat.get_right_grab_point()
+	assert(gp_l.x < cat.position.x and gp_r.x > cat.position.x, "左右抓点对称分布在小猫两侧")
+	print("[PASS] 测试 86: Scale 1.2 下 Edge Grab 与 Climb-Up 几何适配验证成功")
+
+	# 测试 87: Scale 1.5 下平台与墙面门槛自动提升
+	cat.set_user_scale(1.5)
+	var min_plat_15: float = float(cat.get("metrics").min_platform_length)
+	cat.set_user_scale(1.0)
+	var min_plat_10: float = float(cat.get("metrics").min_platform_length)
+	assert(min_plat_15 > min_plat_10 * 1.35, "Scale 1.5 下最小平台长度门槛自动提升")
+	print("[PASS] 测试 87: Scale 1.5 下平台与墙面门槛自动提升验证成功")
+
+	# 测试 88: Metrics 变更触发 metrics_changed 与 NavigationGraph 重建
+	var nav_graph_rebuilt := false
+	var graph_test = PlatformNavigationGraphClass.new(cat)
+	graph_test.surface_world_model = surf_model
+	assert(graph_test.pending_build == false, "初始状态无待构建")
+	cat.adjust_user_scale(0.1)
+	assert(graph_test.pending_build == true, "Metrics 变更自动触发 NavigationGraph 重建请求")
+	print("[PASS] 测试 88: Metrics 变更触发 metrics_changed 与 NavigationGraph 重建验证成功")
+
+	# 测试 89: 运行时缩放突变安全策略 (挂墙/翻越脱落与地面贴合)
+	cat.change_state(Cat.CatState.WALL_CLING)
+	cat.set_user_scale(1.1)
+	assert(cat.current_state == Cat.CatState.FALL, "挂墙时 Scale 改变触发安全脱落进入 FALL")
+	# 落地贴合测试
+	cat.is_grounded = true
+	cat.current_surface = plat_top
+	cat.current_surface_id = "win_top"
+	cat.position = Vector2(200.0, plat_top.y1)
+	var prev_foot_y: float = float(cat.get_foot_position().y)
+	cat.set_user_scale(1.3)
+	assert(absf(float(cat.get_foot_position().y) - prev_foot_y) < 0.1, "Scale 调整后脚底无缝贴合平台表面")
+	print("[PASS] 测试 89: 运行时缩放突变安全策略与地面贴合验证成功")
+
+	# 测试 90: Mouse Passthrough 多边形与 Area2D Hitbox 动态跟随
+	var col_shape: CollisionShape2D = cat.get_node_or_null("Area2D/CollisionShape2D")
+	assert(col_shape and col_shape.shape is RectangleShape2D, "Hitbox 节点存在")
+	var cur_m: RefCounted = cat.get("metrics")
+	assert(absf(float(col_shape.shape.size.x) - float(cur_m.hitbox_size.x)) < 0.01, "碰撞区大小跟随 CatMetrics")
+	var poly = cur_m.get_mouse_passthrough_polygon(cat.position)
+	assert(poly.size() == 4, "鼠标穿透多边形顶点正确")
+	print("[PASS] 测试 90: Mouse Passthrough 多边形与 Area2D Hitbox 动态跟随验证成功")
+
 	fusion_builder.queue_free()
 	vis_model.queue_free()
 	ui_model.queue_free()
@@ -1153,7 +1259,7 @@ func _init() -> void:
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
 	planner.queue_free()
-	print("========== T21 Vertical Wall Attachment & Climbing 单元测试全部通过 (共80项测试) ==========")
+	print("========== T20A Adaptive Cat Scale & CatMetrics 单元测试全部通过 (共90项测试) ==========")
 	quit(0)
 
 

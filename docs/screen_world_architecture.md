@@ -50,5 +50,6 @@
 9. **T19（已完成）**：平台抓边与悬挂系统 (Platform Edge Grab & Hang)，实现临界边缘抓取、动态跟随与释放；
 10. **T20（已完成）**：边缘攀爬翻越系统 (Edge Climb-Up)，实现抓边后的两段式登顶翻越与T18恢复成功闭环；
 11. **T21（已完成）**：垂直墙面附着与攀爬系统 (Vertical Wall Attachment & Climbing)，实现双向攀爬、到顶登顶与动态重绑；
-12. **T22**：攀爬与跳跃融合导航路径规划 (Climb & Jump Fusion Navigation)；
-13. **T23**：桌面全域自主探索与交互系统 (Autonomous Screen Exploration)。
+12. **T20A（已完成）**：自适应猫咪缩放与统一几何度量系统 (Adaptive Cat Scale & CatMetrics)，建立 Responsive Scale + CatMetrics 事实来源，彻底消除硬编码像素技术债；
+13. **T22**：攀爬与跳跃融合导航路径规划 (Climb & Jump Fusion Navigation)；
+14. **T23**：桌面全域自主探索与交互系统 (Autonomous Screen Exploration)。

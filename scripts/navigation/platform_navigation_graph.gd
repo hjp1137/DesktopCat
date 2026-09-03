@@ -44,6 +44,8 @@ var stats: Dictionary = {
 func _init(p_cat: Node2D = null) -> void:
 	cat = p_cat
 	capabilities = CatMovementCapabilitiesClass.new(cat)
+	if is_instance_valid(cat) and cat.has_signal("metrics_changed"):
+		cat.metrics_changed.connect(func(_r): request_rebuild())
 
 func create_drawer() -> Node2D:
 	if drawer == null:

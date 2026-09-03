@@ -151,16 +151,22 @@ func _apply_screen_layout(screen_idx: int) -> void:
 	_on_window_world_updated(0)
 
 
+	if is_instance_valid(cat) and cat.has_method("recalculate_for_display"):
+		cat.recalculate_for_display(screen_size.y)
 	if is_instance_valid(cat) and cat.has_method("reset_to_ground"):
-		cat.reset_to_ground(Vector2(screen_size.x / 2.0, screen_size.y - 48.0)); update_mouse_passthrough(cat.position)
+		var foot_y_off: float = cat.foot_offset.y if "foot_offset" in cat else 26.0
+		cat.reset_to_ground(Vector2(screen_size.x / 2.0, screen_size.y - foot_y_off)); update_mouse_passthrough(cat.position)
 
 
 func update_mouse_passthrough(cat_pos: Vector2) -> void:
 	if DisplayServer.get_name() == "headless" or (mouse_controller and mouse_controller.get("is_dragging")): return
-	var half_w := 32.0; var top_h := 36.0; var bottom_h := 28.0
-	var p1 := cat_pos + Vector2(-half_w, -top_h); var p2 := cat_pos + Vector2(half_w, -top_h)
-	var p3 := cat_pos + Vector2(half_w, bottom_h); var p4 := cat_pos + Vector2(-half_w, bottom_h)
-	DisplayServer.window_set_mouse_passthrough(PackedVector2Array([p1, p2, p3, p4]))
+	if is_instance_valid(cat) and cat.get("metrics") != null:
+		DisplayServer.window_set_mouse_passthrough(cat.metrics.get_mouse_passthrough_polygon(cat_pos))
+	else:
+		var half_w := 32.0; var top_h := 36.0; var bottom_h := 28.0
+		var p1 := cat_pos + Vector2(-half_w, -top_h); var p2 := cat_pos + Vector2(half_w, -top_h)
+		var p3 := cat_pos + Vector2(half_w, bottom_h); var p4 := cat_pos + Vector2(-half_w, bottom_h)
+		DisplayServer.window_set_mouse_passthrough(PackedVector2Array([p1, p2, p3, p4]))
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -259,6 +265,22 @@ func _handle_key_event(event: InputEventKey) -> bool:
 		KEY_F18:
 			if is_instance_valid(cat) and cat.has_method("toggle_wall_debug"):
 				cat.toggle_wall_debug()
+			return true
+		KEY_F19:
+			if is_instance_valid(cat) and cat.has_method("toggle_metrics_debug"):
+				cat.toggle_metrics_debug()
+			return true
+		KEY_BRACKETLEFT:
+			if is_instance_valid(cat) and cat.has_method("adjust_user_scale"):
+				cat.adjust_user_scale(-0.1)
+			return true
+		KEY_BRACKETRIGHT:
+			if is_instance_valid(cat) and cat.has_method("adjust_user_scale"):
+				cat.adjust_user_scale(0.1)
+			return true
+		KEY_BACKSLASH:
+			if is_instance_valid(cat) and cat.has_method("reset_user_scale"):
+				cat.reset_user_scale()
 			return true
 		KEY_P:
 			if autonomous_jump_planner and autonomous_jump_planner.has_method("try_plan_traversal"):

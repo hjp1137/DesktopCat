@@ -301,6 +301,22 @@ func _handle_command_message(data: Dictionary) -> void:
 			cat.toggle_wall_debug()
 		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
 		return
+	if cmd_name in ["TOGGLE_DEBUG_METRICS", "TOGGLE_DEBUG_SCALE"]:
+		if is_instance_valid(cat) and cat.has_method("toggle_metrics_debug"):
+			cat.toggle_metrics_debug()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
+		return
+	if cmd_name == "SET_USER_SCALE":
+		var s_val: float = float(data.get("scale", 1.0))
+		if is_instance_valid(cat) and cat.has_method("set_user_scale"):
+			cat.set_user_scale(s_val)
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name, "user_scale": s_val})
+		return
+	if cmd_name == "RESET_USER_SCALE":
+		if is_instance_valid(cat) and cat.has_method("reset_user_scale"):
+			cat.reset_user_scale()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
+		return
 
 
 

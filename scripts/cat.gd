@@ -8,10 +8,16 @@ enum WallClimbDirection { NONE, UP, DOWN }
 
 signal climb_completed(surface_id: String)
 signal climb_failed(reason: String)
+signal metrics_changed(revision: int)
 
 const GrabbedEdgeClass = preload("res://scripts/world/grabbed_edge.gd")
 const ClimbTargetClass = preload("res://scripts/world/climb_target.gd")
 const WallAttachmentClass = preload("res://scripts/world/wall_attachment.gd")
+const CatMetricsClass = preload("res://scripts/cat/cat_metrics.gd")
+const CatBodyProfileClass = preload("res://scripts/cat/cat_body_profile.gd")
+
+var metrics: RefCounted = null
+var metrics_debug_enabled: bool = false
 
 @export var walk_speed: float = 120.0
 @export var run_speed: float = 220.0
@@ -121,6 +127,76 @@ var pointer_follow_distance: float = 64.0
 @onready var _animated_sprite: AnimatedSprite2D = $AnimatedSprite2D
 @onready var _main_node: Node = get_parent()
 
+func _init() -> void:
+	if metrics == null:
+		metrics = CatMetricsClass.new()
+	_sync_metrics_properties()
+
+func _sync_metrics_properties() -> void:
+	if metrics == null: return
+	foot_offset = metrics.foot_offset
+	body_radius = metrics.body_radius
+	support_margin = metrics.support_margin
+	snap_tolerance = metrics.snap_tolerance
+	edge_grab_x_tolerance = metrics.edge_grab_x_tolerance
+	edge_grab_y_tolerance = metrics.edge_grab_y_tolerance
+	edge_hang_offset_x = metrics.edge_hang_offset_x
+	edge_hang_offset_y = metrics.edge_hang_offset_y
+	grab_point_offset_x = metrics.grab_point_offset_x
+	grab_point_offset_y = metrics.grab_point_offset_y
+	climb_inward_margin = metrics.climb_inward_margin
+	climb_clearance_margin = metrics.climb_clearance_margin
+	min_climb_up_platform_length = metrics.min_platform_length
+	min_climbable_wall_length = metrics.min_climbable_wall_length
+	wall_attach_x_tolerance = metrics.wall_attach_x_tolerance
+	wall_cling_offset_x = metrics.wall_cling_offset_x
+	wall_top_edge_tolerance = metrics.wall_top_edge_tolerance
+
+func recalculate_for_display(screen_h: float) -> void:
+	if metrics == null: metrics = CatMetricsClass.new()
+	var b_scale: float = CatMetricsClass.calc_base_scale_from_screen_height(screen_h)
+	metrics.update_scales(b_scale, metrics.user_scale)
+	_apply_metrics_change()
+
+func set_user_scale(val: float) -> void:
+	if metrics == null: metrics = CatMetricsClass.new()
+	metrics.update_scales(metrics.base_scale, val)
+	_apply_metrics_change()
+
+func adjust_user_scale(delta: float) -> void:
+	if metrics == null: metrics = CatMetricsClass.new()
+	set_user_scale(metrics.user_scale + delta)
+
+func reset_user_scale() -> void:
+	if metrics == null: metrics = CatMetricsClass.new()
+	set_user_scale(CatMetricsClass.DEFAULT_USER_SCALE)
+
+func _apply_metrics_change() -> void:
+	_sync_metrics_properties()
+	var sprite := _get_animated_sprite()
+	if sprite:
+		sprite.scale = Vector2(metrics.final_scale, metrics.final_scale)
+	var col_shape: CollisionShape2D = get_node_or_null("Area2D/CollisionShape2D")
+	if col_shape and col_shape.shape is RectangleShape2D:
+		col_shape.shape.size = metrics.hitbox_size
+
+	if current_state in [CatState.EDGE_HANG, CatState.CLIMB_UP, CatState.WALL_CLING, CatState.WALL_CLIMB]:
+		if current_state in [CatState.WALL_CLING, CatState.WALL_CLIMB]:
+			release_wall("SCALE_CHANGED")
+		elif current_state == CatState.CLIMB_UP:
+			cancel_climb("SCALE_CHANGED")
+		elif current_state == CatState.EDGE_HANG:
+			release_edge()
+	elif is_grounded and current_surface != null:
+		position.y = current_surface.y1 - foot_offset.y
+
+	metrics_changed.emit(metrics.metrics_revision)
+	queue_redraw()
+	print("[Cat] Metrics updated: rev=%d final_scale=%.3f (visual %.0fx%.0f, body %.0fx%.0f)" % [
+		metrics.metrics_revision, metrics.final_scale, metrics.visual_width, metrics.visual_height,
+		metrics.body_width, metrics.body_height
+	])
+
 func get_foot_position() -> Vector2:
 	return position + foot_offset
 
@@ -130,27 +206,33 @@ func get_left_grab_point() -> Vector2:
 func get_right_grab_point() -> Vector2:
 	return position + Vector2(grab_point_offset_x, grab_point_offset_y)
 
+func get_wall_contact_point() -> Vector2:
+	var side_x: float = wall_cling_offset_x if direction >= 0.0 else -wall_cling_offset_x
+	return position + Vector2(side_x, grab_point_offset_y * 0.9)
+
+func toggle_metrics_debug() -> bool:
+	metrics_debug_enabled = not metrics_debug_enabled
+	print("[Metrics] Debug View (F19): %s" % ("ON" if metrics_debug_enabled else "OFF"))
+	queue_redraw()
+	return metrics_debug_enabled
+
 func toggle_edge_grab_debug() -> bool:
 	edge_grab_debug_enabled = not edge_grab_debug_enabled
-	print("[EdgeGrab] Debug View: %s" % ("ON" if edge_grab_debug_enabled else "OFF"))
+	print("[EdgeGrab] Debug View (F16): %s" % ("ON" if edge_grab_debug_enabled else "OFF"))
 	queue_redraw()
 	return edge_grab_debug_enabled
 
 func toggle_climb_debug() -> bool:
 	climb_debug_enabled = not climb_debug_enabled
-	print("[Climb] Debug View: %s" % ("ON" if climb_debug_enabled else "OFF"))
+	print("[Climb] Debug View (F17): %s" % ("ON" if climb_debug_enabled else "OFF"))
 	queue_redraw()
 	return climb_debug_enabled
 
 func toggle_wall_debug() -> bool:
 	wall_debug_enabled = not wall_debug_enabled
-	print("[Wall] Debug View: %s" % ("ON" if wall_debug_enabled else "OFF"))
+	print("[Wall] Debug View (F18): %s" % ("ON" if wall_debug_enabled else "OFF"))
 	queue_redraw()
 	return wall_debug_enabled
-
-func get_wall_contact_point() -> Vector2:
-	var side_x: float = wall_cling_offset_x if direction >= 0.0 else -wall_cling_offset_x
-	return position + Vector2(side_x, -18.0)
 
 func get_current_surface_id() -> String:
 	return current_surface_id
@@ -165,8 +247,13 @@ func toggle_physics_debug() -> bool:
 	return physics_debug_enabled
 
 func _ready() -> void:
-	ground_y = _get_viewport_size().y - 48.0
-	if position.y == 0.0: position = Vector2(_get_viewport_size().x / 2.0, ground_y)
+	if metrics == null: metrics = CatMetricsClass.new()
+	var vp_size := _get_viewport_size()
+	var b_scale: float = CatMetricsClass.calc_base_scale_from_screen_height(vp_size.y)
+	metrics.update_scales(b_scale, metrics.user_scale)
+	_apply_metrics_change()
+	ground_y = vp_size.y - 48.0
+	if position.y == 0.0: position = Vector2(vp_size.x / 2.0, ground_y)
 	_prev_foot_y = get_foot_position().y
 	_prev_grab_left = get_left_grab_point()
 	_prev_grab_right = get_right_grab_point()
@@ -1109,4 +1196,28 @@ func _draw() -> void:
 		var wid_str: String = current_wall_attachment.wall_surface_id if current_wall_attachment != null else "NONE"
 		var w_info := "[F18 Wall] State: %s | Wall: %s | Dir: %s | Attach: %d" % [CatState.keys()[current_state], wid_str, dir_str, int(wall_stats["wall_attach_success"])]
 		draw_string(ThemeDB.fallback_font, Vector2(-60.0, -80.0), w_info, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.8, 0.2, 0.95))
+
+	if metrics_debug_enabled and metrics != null:
+		var body_box := Rect2(-metrics.half_body_width, -metrics.half_body_height, metrics.body_width, metrics.body_height)
+		draw_rect(body_box, Color(0.2, 0.8, 1.0, 0.4), false, 2.0)
+		var hit_box := Rect2(-metrics.hit_region_half_w, -metrics.hit_region_top_h, metrics.hit_region_half_w * 2.0, metrics.hit_region_top_h + metrics.hit_region_bottom_h)
+		draw_rect(hit_box, Color(1.0, 0.2, 0.8, 0.35), false, 1.5)
+
+		var f_local := foot_offset
+		draw_circle(f_local, 4.0, Color(0.2, 1.0, 0.4, 0.95))
+		draw_line(f_local + Vector2(-metrics.foot_width * 0.5, 0.0), f_local + Vector2(metrics.foot_width * 0.5, 0.0), Color(0.2, 1.0, 0.4, 0.8), 2.5)
+
+		var gl := to_local(get_left_grab_point())
+		var gr := to_local(get_right_grab_point())
+		draw_circle(gl, 4.0, Color(0.1, 0.9, 1.0, 0.95))
+		draw_circle(gr, 4.0, Color(1.0, 0.8, 0.1, 0.95))
+
+		var wc := to_local(get_wall_contact_point())
+		draw_circle(wc, 5.0, Color(1.0, 0.5, 0.0, 0.95))
+
+		var m_info := "[F19 Metrics] Scale: base=%.2f user=%.2f final=%.2f | Visual: %.0fx%.0f | Body: %.0fx%.0f" % [
+			metrics.base_scale, metrics.user_scale, metrics.final_scale,
+			metrics.visual_width, metrics.visual_height, metrics.body_width, metrics.body_height
+		]
+		draw_string(ThemeDB.fallback_font, Vector2(-60.0, -94.0), m_info, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.4, 1.0, 0.8, 0.95))
 

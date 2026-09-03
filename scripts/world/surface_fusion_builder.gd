@@ -49,6 +49,16 @@ var stats: Dictionary = {
 	"fusion_ms": 0.0
 }
 
+func get_min_platform_length() -> float:
+	if is_instance_valid(cat) and cat.get("metrics") != null:
+		return cat.metrics.min_platform_length
+	return MIN_PLATFORM_LENGTH
+
+func get_min_climbable_wall_length() -> float:
+	if is_instance_valid(cat) and cat.get("metrics") != null:
+		return cat.metrics.min_climbable_wall_length
+	return MIN_CLIMBABLE_WALL_LENGTH
+
 func _ready() -> void:
 	pass
 
@@ -323,12 +333,12 @@ func execute_fusion() -> bool:
 		c.x1 = round(c.x1 / q) * q; c.x2 = round(c.x2 / q) * q
 		c.y1 = round(c.y1 / q) * q; c.y2 = round(c.y2 / q) * q
 		if c.surface_type == SurfaceClass.SurfaceType.PLATFORM:
-			if (c.x2 - c.x1) >= MIN_PLATFORM_LENGTH: valid_cands.append(c)
+			if (c.x2 - c.x1) >= get_min_platform_length(): valid_cands.append(c)
 			else: stats["filtered_small"] += 1
 		else:
 			var wall_len: float = c.y2 - c.y1
 			if wall_len >= MIN_WALL_LENGTH:
-				if wall_len >= MIN_CLIMBABLE_WALL_LENGTH and c.source_type != "SCREEN" and not c.candidate_id.begins_with("screen:"):
+				if wall_len >= get_min_climbable_wall_length() and c.source_type != "SCREEN" and not c.candidate_id.begins_with("screen:"):
 					c.climbable = true
 				valid_cands.append(c)
 			else: stats["filtered_small"] += 1

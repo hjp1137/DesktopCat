@@ -22,7 +22,12 @@ func sync_from_cat(cat_node: Node2D) -> void:
 	if "jump_velocity" in cat_node: jump_velocity = float(cat_node.jump_velocity)
 	if "walk_speed" in cat_node: walk_speed = float(cat_node.walk_speed)
 	if "run_speed" in cat_node: run_speed = float(cat_node.run_speed)
-	if "body_radius" in cat_node:
+	var m = cat_node.get("metrics")
+	if m != null:
+		body_radius = float(m.body_radius)
+		foot_width = float(m.foot_width)
+		landing_margin = float(m.support_margin)
+	elif "body_radius" in cat_node:
 		body_radius = float(cat_node.body_radius)
 		foot_width = body_radius * 2.0
 		landing_margin = maxf(4.0, body_radius * 0.5)
