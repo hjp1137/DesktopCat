@@ -32,6 +32,7 @@ var command_manager: CommandManager = null
 var cat: Node2D = null
 var main_node: Node2D = null
 var window_world_model: Node = null
+var surface_world_model: Node = null
 
 
 func _ready() -> void:
@@ -89,6 +90,8 @@ func _cleanup_client(reason: String = "") -> void:
 	input_buffer.clear()
 	if is_instance_valid(window_world_model) and window_world_model.has_method("clear_windows"):
 		window_world_model.clear_windows()
+	if is_instance_valid(surface_world_model) and surface_world_model.has_method("clear_surfaces"):
+		surface_world_model.clear_surfaces()
 	if reason != "":
 		print("[Bridge] %s" % reason)
 
@@ -161,6 +164,12 @@ func _handle_command_message(data: Dictionary) -> void:
 			window_world_model.toggle_debug_draw()
 		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
 		return
+	if cmd_name == "TOGGLE_DEBUG_SURFACES":
+		if is_instance_valid(surface_world_model) and surface_world_model.has_method("toggle_debug_draw"):
+			surface_world_model.toggle_debug_draw()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
+		return
+
 	if not ALLOWED_COMMANDS.has(cmd_name):
 		_send_error("UNKNOWN_COMMAND", "Command not allowed: " + cmd_name)
 		return

@@ -11,15 +11,15 @@
          ↓ (EnumWindows / DwmGetWindowAttribute / ctypes)
 [Window Geometry] (Top-level window rects, screen-clipped)
          ↓ (T10/T11 NDJSON Protocol: window_snapshot)
-[WindowWorldModel] (Godot 纯数据模型存储)
-         ↓ (T12+ Surface Extraction: 顶边/侧边提取)
-[Dynamic World Map] (Platform / Wall / Obstacle 几何抽象)
-         ↓ (T13+ StaticBody2D / Navigation Graph)
+[WindowWorldModel] (Godot 纯几何数据模型存储)
+         ↓ (T12 SurfaceWorldModel: 顶边遮挡切分、48px过滤、屏幕边界)
+[Surface World] (PLATFORM / WALL 线段表面模型)
+         ↓ (T13 Multi-Surface Cat Physics: 动态多表面着陆与碰撞)
 [Cat Physics & Behavior] (走台阶、立足、跳跃、抓边、攀爬与探索)
 ```
 
 ## 3. 阶段演进规划
-1. **T11（当前阶段）**：顶层窗口几何感知（Window Geometry Perception），完成 Win32 数据采集、局部坐标转换、裁剪与 `WindowWorldModel` 存储；
-2. **T12**：表面与平台提取（Surface Extraction），将 Window 顶边缘提炼为水平可站立平台（Platform）与侧边垂直墙面（Wall）；
-3. **T13**：动态物理碰撞与多层着陆（Dynamic Physical Ground & Multi-tier Landing），让小猫真正站立在窗口顶边上；
-4. **T14+**：抓边攀爬、窗口跟随与 UI 深度语义感知。
+1. **T11（已完成）**：顶层窗口几何感知（Window Geometry Perception），完成 Win32 数据采集、局部坐标转换、裁剪与 `WindowWorldModel` 存储；
+2. **T12（已完成）**：窗口几何转 Surface 物理世界（Surface World），提取 `PLATFORM`（顶边/底边/屏幕地面）与 `WALL`（左右侧边/屏幕墙），实现轻量顶边遮挡切分与空间查询 API，F9 独立调试渲染；
+3. **T13（下一步）**：多表面动态物理系统（Multi-Surface Cat Physics），正式打破单一 `ground_y` 世界假设，实现小猫跳跃落到窗口顶边、在窗口上行走与从窗口下落；
+4. **T14+**：抓边攀爬、窗口移动小猫跟随与 UI 深度语义感知。

@@ -4,6 +4,7 @@ const MouseControllerClass = preload("res://scripts/mouse_controller.gd")
 const MousePerceptionControllerClass = preload("res://scripts/mouse_perception_controller.gd")
 const ExternalBridgeClass = preload("res://scripts/external_bridge.gd")
 const WindowWorldModelClass = preload("res://scripts/world/window_world_model.gd")
+const SurfaceWorldModelClass = preload("res://scripts/world/surface_world_model.gd")
 
 @onready var cat: Node2D = $Cat
 var command_manager: CommandManager = null
@@ -11,6 +12,7 @@ var mouse_controller: Node = null
 var mouse_perception_controller: Node = null
 var external_bridge: Node = null
 var window_world_model: Node2D = null
+var surface_world_model: Node2D = null
 var current_target_screen: int = 0
 
 func _ready() -> void:
@@ -35,12 +37,18 @@ func _ready() -> void:
 	window_world_model = WindowWorldModelClass.new()
 	add_child(window_world_model)
 	
+	surface_world_model = SurfaceWorldModelClass.new()
+	add_child(surface_world_model)
+	window_world_model.window_world_updated.connect(_on_window_world_updated)
+	
 	external_bridge = ExternalBridgeClass.new()
 	external_bridge.set("command_manager", command_manager)
 	external_bridge.set("cat", cat)
 	external_bridge.set("main_node", self)
 	external_bridge.set("window_world_model", window_world_model)
+	external_bridge.set("surface_world_model", surface_world_model)
 	add_child(external_bridge)
+
 	
 	if DisplayServer.get_name() != "headless":
 		current_target_screen = get_window().current_screen
@@ -78,6 +86,8 @@ func _apply_screen_layout(screen_idx: int) -> void:
 	window.position = screen_pos; window.size = screen_size
 	if window_world_model and window_world_model.has_method("clear_windows"):
 		window_world_model.clear_windows()
+	if surface_world_model and surface_world_model.has_method("clear_surfaces"):
+		surface_world_model.clear_surfaces()
 	if is_instance_valid(cat) and cat.has_method("reset_to_ground"):
 		cat.reset_to_ground(Vector2(screen_size.x / 2.0, screen_size.y - 48.0)); update_mouse_passthrough(cat.position)
 
@@ -105,6 +115,10 @@ func _handle_key_event(event: InputEventKey) -> bool:
 			if window_world_model and window_world_model.has_method("toggle_debug_draw"):
 				window_world_model.toggle_debug_draw()
 			return true
+		KEY_F9, KEY_B, KEY_P:
+			if surface_world_model and surface_world_model.has_method("toggle_debug_draw"):
+				surface_world_model.toggle_debug_draw()
+			return true
 
 		KEY_C: if mouse_perception_controller and mouse_perception_controller.has_method("toggle_debug_follow"): mouse_perception_controller.toggle_debug_follow(); return true
 		KEY_1: command_manager.send_command(CommandManager.CatCommand.STOP); return true
@@ -118,6 +132,15 @@ func _handle_key_event(event: InputEventKey) -> bool:
 		KEY_9: command_manager.send_command(CommandManager.CatCommand.SLEEP); return true
 		KEY_0: command_manager.send_command(CommandManager.CatCommand.WAKE); return true
 	return false
+
+func _on_window_world_updated(_rev: int) -> void:
+	if not is_instance_valid(surface_world_model) or not is_instance_valid(window_world_model):
+		return
+	var win := get_window()
+	var ov_sz: Vector2 = Vector2(win.size) if win else Vector2(1920, 1080)
+	var gy: float = cat.ground_y if is_instance_valid(cat) and "ground_y" in cat else ov_sz.y - 48.0
+	surface_world_model.rebuild_from_windows(window_world_model.windows_by_id, ov_sz, gy)
+
 
 
 func get_overlay_info() -> Dictionary:

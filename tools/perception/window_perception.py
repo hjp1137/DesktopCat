@@ -149,8 +149,9 @@ class WindowPerceptionService:
             self._update_status()
             self._ensure_godot_hwnd()
             print(f"[Perception] Connected to DesktopCat ({self.host}:{self.port}), Screen {self.screen_info.get('index', 0)}")
-            print("[Perception] 提示: 按键盘减号键[-] (数字0右侧)、字母键[V] 或 [Fn+F8]，即可随时切换窗口线框显示！")
+            print("[Perception] 提示: 按 [-]/[V] 切换窗口外框(F8)，按 [=]/[B] 切换物理表面(F9)！")
             return True
+
 
 
         except Exception as e:
@@ -244,16 +245,25 @@ class WindowPerceptionService:
                 time.sleep(2.0)
 
     def _check_global_hotkeys(self):
-        # 0x77: F8, 0xBD: - (数字0右侧减号), 0x56: V, 0x57: W
-        hotkeys = {0x77: "F8", 0xBD: "减号键(-)", 0x56: "V", 0x57: "W"}
-        for vk, name in hotkeys.items():
+        hotkeys_win = {0x77: "F8", 0xBD: "减号键(-)", 0x56: "V"}
+        hotkeys_surf = {0x78: "F9", 0xBB: "等号键(=)", 0x42: "B"}
+        for vk, name in hotkeys_win.items():
             is_down = bool(user32.GetAsyncKeyState(vk) & 0x8000)
             was_down = self.hotkey_states.get(vk, False)
             self.hotkey_states[vk] = is_down
             if is_down and not was_down:
-                print(f"[Perception] 检测到快捷键 [{name}]，已发送切换窗口调试线框指令！")
+                print(f"[Perception] 检测到快捷键 [{name}]，切换【窗口几何】调试线框...")
                 self._send_msg({"v": 1, "type": "command", "name": "TOGGLE_DEBUG_WINDOWS"})
                 self._recv_line()
+        for vk, name in hotkeys_surf.items():
+            is_down = bool(user32.GetAsyncKeyState(vk) & 0x8000)
+            was_down = self.hotkey_states.get(vk, False)
+            self.hotkey_states[vk] = is_down
+            if is_down and not was_down:
+                print(f"[Perception] 检测到快捷键 [{name}]，切换【Surface 物理表面】调试线框...")
+                self._send_msg({"v": 1, "type": "command", "name": "TOGGLE_DEBUG_SURFACES"})
+                self._recv_line()
+
 
 
 

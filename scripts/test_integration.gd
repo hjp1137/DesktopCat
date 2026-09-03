@@ -39,10 +39,16 @@ func _process(delta: float) -> bool:
 
 	elif step_idx == 3 and elapsed_time > 1.3:
 		step_idx = 4
-		print("========== 阶段 4: 触发 F8 切换 Debug 绘制 ==========")
+		print("========== 阶段 4: 验证 WindowWorldModel 与 SurfaceWorldModel 同步 ==========")
+		assert(main_scene.surface_world_model.surfaces_by_id.has("0x30094:top"), "SurfaceWorldModel 应生成 0x30094:top")
+		assert(main_scene.surface_world_model.surfaces_by_id.has("screen:ground"), "SurfaceWorldModel 应生成 screen:ground")
+		print("========== 阶段 4b: 触发 F8 与 F9 切换 Debug 绘制 ==========")
 		var ev_f8 := InputEventKey.new(); ev_f8.keycode = KEY_F8; ev_f8.pressed = true
-		main_scene._unhandled_input(ev_f8)
-		assert(main_scene.window_world_model.debug_draw_enabled == true, "F8 应成功开启 Debug 绘制")
+		main_scene._input(ev_f8)
+		assert(main_scene.window_world_model.debug_draw_enabled == true, "F8 应成功开启 Window Debug")
+		var ev_f9 := InputEventKey.new(); ev_f9.keycode = KEY_F9; ev_f9.pressed = true
+		main_scene._input(ev_f9)
+		assert(main_scene.surface_world_model.debug_draw_enabled == true, "F9 应成功开启 Surface Debug")
 
 	elif step_idx == 4 and elapsed_time > 1.7:
 		step_idx = 5
@@ -54,6 +60,7 @@ func _process(delta: float) -> bool:
 		step_idx = 6
 		print("========== 阶段 6: 触发 ESC 安全退出 ==========")
 		var ev_esc := InputEventKey.new(); ev_esc.keycode = KEY_ESCAPE; ev_esc.pressed = true
-		main_scene._unhandled_input(ev_esc)
+		main_scene._input(ev_esc)
 		return true
 	return false
+

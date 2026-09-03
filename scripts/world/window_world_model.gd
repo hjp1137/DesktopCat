@@ -1,6 +1,8 @@
 class_name WindowWorldModel
 extends Node2D
 
+signal window_world_updated(revision: int)
+
 var latest_revision: int = 0
 var screen_size: Vector2 = Vector2(1920, 1080)
 var windows_by_id: Dictionary = {}
@@ -34,12 +36,15 @@ func apply_snapshot(data: Dictionary) -> bool:
 			}
 	print("[World] Window snapshot revision %d: %d windows" % [latest_revision, windows_by_id.size()])
 	queue_redraw()
+	emit_signal("window_world_updated", latest_revision)
 	return true
 
 func clear_windows() -> void:
 	windows_by_id.clear()
 	latest_revision = 0
 	queue_redraw()
+	emit_signal("window_world_updated", 0)
+
 
 func toggle_debug_draw() -> bool:
 	debug_draw_enabled = not debug_draw_enabled
