@@ -42,16 +42,28 @@ func _process(delta: float) -> bool:
 		print("========== 阶段 4: 验证 WindowWorldModel 与 SurfaceWorldModel 同步 ==========")
 		assert(main_scene.surface_world_model.surfaces_by_id.has("0x30094:top"), "SurfaceWorldModel 应生成 0x30094:top")
 		assert(main_scene.surface_world_model.surfaces_by_id.has("screen:ground"), "SurfaceWorldModel 应生成 screen:ground")
-		print("========== 阶段 4b: 触发 F8 与 F9 切换 Debug 绘制 ==========")
+		print("========== 阶段 4b: 触发 F8、F9 与 F10 切换 Debug 绘制 ==========")
 		var ev_f8 := InputEventKey.new(); ev_f8.keycode = KEY_F8; ev_f8.pressed = true
 		main_scene._input(ev_f8)
 		assert(main_scene.window_world_model.debug_draw_enabled == true, "F8 应成功开启 Window Debug")
 		var ev_f9 := InputEventKey.new(); ev_f9.keycode = KEY_F9; ev_f9.pressed = true
 		main_scene._input(ev_f9)
 		assert(main_scene.surface_world_model.debug_draw_enabled == true, "F9 应成功开启 Surface Debug")
+		var ev_f10 := InputEventKey.new(); ev_f10.keycode = KEY_F10; ev_f10.pressed = true
+		main_scene._input(ev_f10)
+		assert(main_scene.cat.physics_debug_enabled == true, "F10 应成功开启 Physics Debug")
+
+		print("========== 阶段 4c: 验证小猫下落着陆到 Chrome 顶边 ==========")
+		main_scene.cat.position = Vector2(400.0, 100.0)
+		main_scene.cat.vertical_velocity = 800.0
+		main_scene.cat.is_grounded = false
+		main_scene.cat.change_state(Cat.CatState.FALL)
 
 	elif step_idx == 4 and elapsed_time > 1.7:
 		step_idx = 5
+		assert(main_scene.cat.is_grounded == true, "小猫下落后应当着陆")
+		assert(main_scene.cat.current_surface_id == "0x30094:top", "应当着陆在 Chrome 顶边 0x30094:top")
+		assert(absf(main_scene.cat.position.y - 150.0) < 0.5, "着陆点 Y 坐标应与 Chrome 顶边 150 一致")
 		print("========== 阶段 5: 断开连接 ==========")
 		tcp_client.disconnect_from_host()
 		tcp_client = null
@@ -63,4 +75,5 @@ func _process(delta: float) -> bool:
 		main_scene._input(ev_esc)
 		return true
 	return false
+
 

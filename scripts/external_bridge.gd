@@ -88,12 +88,10 @@ func _cleanup_client(reason: String = "") -> void:
 		client.disconnect_from_host()
 		client = null
 	input_buffer.clear()
-	if is_instance_valid(window_world_model) and window_world_model.has_method("clear_windows"):
-		window_world_model.clear_windows()
-	if is_instance_valid(surface_world_model) and surface_world_model.has_method("clear_surfaces"):
-		surface_world_model.clear_surfaces()
+	# T13: 保留最后已知有效快照（Last Known Good Snapshot），断线不破坏物理表面世界
 	if reason != "":
 		print("[Bridge] %s" % reason)
+
 
 
 func _process_input_buffer() -> void:
@@ -169,6 +167,12 @@ func _handle_command_message(data: Dictionary) -> void:
 			surface_world_model.toggle_debug_draw()
 		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
 		return
+	if cmd_name == "TOGGLE_DEBUG_PHYSICS":
+		if is_instance_valid(cat) and cat.has_method("toggle_physics_debug"):
+			cat.toggle_physics_debug()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
+		return
+
 
 	if not ALLOWED_COMMANDS.has(cmd_name):
 		_send_error("UNKNOWN_COMMAND", "Command not allowed: " + cmd_name)

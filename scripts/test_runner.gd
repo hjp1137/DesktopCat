@@ -123,10 +123,99 @@ func _init() -> void:
 	assert(near_ground.size() == 1 and near_ground[0].id == "screen:ground", "near_y 空间查询正确")
 	print("[PASS] 测试 10: 最小长度过滤与空间查询 API 验证成功")
 
+	# ========== T13 Multi-Surface Cat Physics 单元测试 ==========
+	cat.surface_world_model = surf_model
+	surf_model.surface_world_updated.connect(cat.on_surface_world_updated)
+
+	# 测试 11: 窗口顶边着陆与 Swept Landing
+	var test_win = {
+		"win1": {"id": "win1", "rect": Rect2(100, 200, 400, 300), "z_order": 0}
+	}
+	surf_model.rebuild_from_windows(test_win, Vector2(1920, 1080), 1000.0)
+	cat.position = Vector2(300.0, 180.0)
+	cat.vertical_velocity = 300.0
+	cat.is_grounded = false
+	cat.change_state(Cat.CatState.FALL)
+	cat.update_state(0.1)
+	assert(cat.is_grounded == true, "小猫应当成功着陆在窗口顶边")
+	assert(cat.current_surface_id == "win1:top", "着陆表面应为 win1:top")
+	assert(absf(cat.position.y - 200.0) < 0.1, "接触点高度应当与窗口顶边一致")
+	print("[PASS] 测试 11: 窗口顶边正常下落 Swept Landing 成功")
+
+	# 测试 12: 高速下落防穿透 (3000px/s 跨帧下落)
+	cat.position = Vector2(300.0, 50.0)
+	cat.vertical_velocity = 3000.0
+	cat.is_grounded = false
+	cat.change_state(Cat.CatState.FALL)
+	cat.update_state(0.1)
+	assert(cat.is_grounded == true and cat.current_surface_id == "win1:top", "高速下落不应穿透平台")
+	assert(absf(cat.position.y - 200.0) < 0.1, "高速着陆点精度正确")
+	print("[PASS] 测试 12: 高速下落防穿透测试成功")
+
+	# 测试 13: 多层窗口选择最高/首个相交平台
+	var multi_win = {
+		"winA": {"id": "winA", "rect": Rect2(100, 300, 400, 200), "z_order": 0},
+		"winB": {"id": "winB", "rect": Rect2(100, 450, 400, 200), "z_order": 1}
+	}
+	surf_model.rebuild_from_windows(multi_win, Vector2(1920, 1080), 1000.0)
+	cat.position = Vector2(300.0, 200.0)
+	cat.vertical_velocity = 2000.0
+	cat.is_grounded = false
+	cat.change_state(Cat.CatState.FALL)
+	cat.update_state(0.1)
+	assert(cat.is_grounded == true and cat.current_surface_id == "winA:top", "多候选平台应优先停留在最先相交的winA")
+	print("[PASS] 测试 13: 多层窗口候选优先选择首个交叉平台成功")
+
+	# 测试 14: 从下往上跳跃穿过平台 (One-Way Platform)
+	cat.position = Vector2(300.0, 350.0)
+	cat.vertical_velocity = -400.0
+	cat.is_grounded = false
+	cat.change_state(Cat.CatState.JUMP)
+	cat.update_state(0.1)
+	assert(cat.is_grounded == false, "从下往上跳跃不应阻挡或粘连平台")
+	assert(cat.current_state == Cat.CatState.JUMP, "应继续保持 JUMP 状态")
+	print("[PASS] 测试 14: 从下往上跳跃穿过平台验证成功")
+
+	# 测试 15: 走出平台边缘自动下落
+	cat.position = Vector2(498.0, 300.0)
+	cat.vertical_velocity = 0.0
+	cat.is_grounded = true
+	cat.direction = 1.0
+	cat.current_surface_id = "winA:top"
+	cat.change_state(Cat.CatState.WALK)
+	cat.update_state(0.1)
+	cat.update_state(0.016)
+	assert(cat.is_grounded == false, "超出平台边缘应当立即失去支撑")
+	assert(cat.current_state == Cat.CatState.FALL, "失去支撑后应当切换为 FALL 状态")
+	print("[PASS] 测试 15: 走出平台边缘自动下落验证成功")
+
+
+	# 测试 16: 动态窗口移动时小猫跟随
+	cat.position = Vector2(250.0, 300.0)
+	cat.is_grounded = true
+	cat.current_surface_id = "winA:top"
+	cat.current_surface = surf_model.get_surface_by_id("winA:top")
+	cat.change_state(Cat.CatState.SIT)
+	var moved_win = {
+		"winA": {"id": "winA", "rect": Rect2(140, 320, 400, 200), "z_order": 0}
+	}
+	surf_model.rebuild_from_windows(moved_win, Vector2(1920, 1080), 1000.0)
+	assert(absf(cat.position.x - 290.0) < 0.5 and absf(cat.position.y - 320.0) < 0.5, "小猫应当跟随窗口平移")
+	assert(cat.current_state == Cat.CatState.SIT, "跟随窗口不应破坏 SIT 生活状态")
+	print("[PASS] 测试 16: 动态窗口移动跟随验证成功")
+
+	# 测试 17: 窗口关闭/平台消失后小猫下落
+	surf_model.rebuild_from_windows({}, Vector2(1920, 1080), 1000.0)
+	cat.update_state(0.016)
+	assert(cat.is_grounded == false and cat.current_state == Cat.CatState.FALL, "平台消失后小猫应当失去支撑坠落")
+	print("[PASS] 测试 17: 窗口关闭/平台消失自动下落验证成功")
+
 	surf_model.queue_free()
 	bridge.stop_server(); bridge.queue_free()
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
-	print("========== T12 Surface World 所有单元测试全部通过 ==========")
+	print("========== T13 Multi-Surface Cat Physics 单元测试全部通过 ==========")
 	quit(0)
+
+
 

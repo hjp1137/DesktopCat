@@ -149,8 +149,9 @@ class WindowPerceptionService:
             self._update_status()
             self._ensure_godot_hwnd()
             print(f"[Perception] Connected to DesktopCat ({self.host}:{self.port}), Screen {self.screen_info.get('index', 0)}")
-            print("[Perception] 提示: 按 [-]/[V] 切换窗口外框(F8)，按 [=]/[B] 切换物理表面(F9)！")
+            print("[Perception] 提示: 按 [-]/[V] 窗口外框(F8)，按 [=]/[B] 物理表面(F9)，按 [N]/[M] 物理接触点与站立表面(F10)！")
             return True
+
 
 
 
@@ -263,6 +264,16 @@ class WindowPerceptionService:
                 print(f"[Perception] 检测到快捷键 [{name}]，切换【Surface 物理表面】调试线框...")
                 self._send_msg({"v": 1, "type": "command", "name": "TOGGLE_DEBUG_SURFACES"})
                 self._recv_line()
+        hotkeys_phys = {0x79: "F10", 0x4E: "N", 0x4D: "M"}
+        for vk, name in hotkeys_phys.items():
+            is_down = bool(user32.GetAsyncKeyState(vk) & 0x8000)
+            was_down = self.hotkey_states.get(vk, False)
+            self.hotkey_states[vk] = is_down
+            if is_down and not was_down:
+                print(f"[Perception] 检测到快捷键 [{name}]，切换【Cat 物理接触点与表面高亮】调试线框...")
+                self._send_msg({"v": 1, "type": "command", "name": "TOGGLE_DEBUG_PHYSICS"})
+                self._recv_line()
+
 
 
 

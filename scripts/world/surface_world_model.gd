@@ -14,12 +14,17 @@ var surface_revision: int = 0
 var surfaces_by_id: Dictionary = {}
 var debug_draw_enabled: bool = false
 var last_geometry_signature: String = ""
+var previous_window_positions: Dictionary = {}
+var window_deltas: Dictionary = {}
 
 func clear_surfaces() -> void:
 	surfaces_by_id.clear()
 	last_geometry_signature = ""
 	surface_revision = 0
+	previous_window_positions.clear()
+	window_deltas.clear()
 	queue_redraw()
+
 
 func toggle_debug_draw() -> bool:
 	debug_draw_enabled = not debug_draw_enabled
@@ -29,11 +34,14 @@ func toggle_debug_draw() -> bool:
 
 func _create_screen_surfaces(overlay_sz: Vector2, ground_y: float) -> Array:
 	var list: Array = []
-	list.append(SurfaceClass.new("screen:ground", "screen", "SCREEN", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 0.0, ground_y, overlay_sz.x, ground_y, true, false))
-	list.append(SurfaceClass.new("screen:left", "screen", "SCREEN", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, 0.0, 0.0, 0.0, overlay_sz.y, false, false))
-	list.append(SurfaceClass.new("screen:right", "screen", "SCREEN", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.RIGHT, overlay_sz.x, 0.0, overlay_sz.x, overlay_sz.y, false, false))
-	list.append(SurfaceClass.new("screen:top", "screen", "SCREEN", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.BOTTOM, 0.0, 0.0, overlay_sz.x, 0.0, false, false))
+	var sx: float = maxf(overlay_sz.x, 1920.0)
+	var sy: float = maxf(overlay_sz.y, 1080.0)
+	list.append(SurfaceClass.new("screen:ground", "screen", "SCREEN", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, -5000.0, ground_y, sx + 5000.0, ground_y, true, false))
+	list.append(SurfaceClass.new("screen:left", "screen", "SCREEN", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, 0.0, 0.0, 0.0, sy, false, false))
+	list.append(SurfaceClass.new("screen:right", "screen", "SCREEN", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.RIGHT, sx, 0.0, sx, sy, false, false))
+	list.append(SurfaceClass.new("screen:top", "screen", "SCREEN", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.BOTTOM, 0.0, 0.0, sx, 0.0, false, false))
 	return list
+
 
 
 func _subtract_interval(intervals: Array, ox1: float, ox2: float) -> Array:
@@ -56,10 +64,22 @@ func rebuild_from_windows(windows: Dictionary, overlay_sz: Vector2, ground_y: fl
 		new_surfaces[s.id] = s
 
 	var win_list := windows.values()
+	var new_positions: Dictionary = {}
+	var new_deltas: Dictionary = {}
 	for win in win_list:
+		var wid: String = str(win.get("id", ""))
+		var wpos: Vector2 = win.get("rect", Rect2()).position
+		new_positions[wid] = wpos
+		if previous_window_positions.has(wid):
+			new_deltas[wid] = wpos - previous_window_positions[wid]
+		else:
+			new_deltas[wid] = Vector2.ZERO
 		_extract_window_surfaces(win, win_list, new_surfaces)
 		if new_surfaces.size() >= MAX_SURFACES:
 			break
+	previous_window_positions = new_positions
+	window_deltas = new_deltas
+
 
 	var sig_parts: Array[String] = []
 	var keys := new_surfaces.keys()
@@ -145,7 +165,32 @@ func find_surfaces_in_rect(query_rect: Rect2) -> Array:
 			res.append(s)
 	return res
 
+func get_window_delta(wid: String) -> Vector2:
+	return window_deltas.get(wid, Vector2.ZERO)
+
+func find_support_surface_at(foot_x: float, foot_y: float, tol_y: float = 8.0, tol_x: float = 4.0) -> RefCounted:
+	for s in surfaces_by_id.values():
+		if s.walkable and absf(s.y1 - foot_y) <= tol_y:
+			if (s.x1 - tol_x) <= foot_x and foot_x <= (s.x2 + tol_x):
+				return s
+	return null
+
+func find_crossed_walkable_surface(prev_foot_y: float, next_foot_y: float, foot_x: float, margin: float = 4.0) -> RefCounted:
+	var best_surf: RefCounted = null
+	var min_y: float = INF
+	for s in surfaces_by_id.values():
+		if not s.walkable:
+			continue
+		var sy: float = s.y1
+		if prev_foot_y <= sy + 1.0 and next_foot_y >= sy:
+			if (s.x1 - margin) <= foot_x and foot_x <= (s.x2 + margin):
+				if sy < min_y:
+					min_y = sy
+					best_surf = s
+	return best_surf
+
 func _draw() -> void:
+
 	if not debug_draw_enabled:
 		return
 	var font := ThemeDB.fallback_font
