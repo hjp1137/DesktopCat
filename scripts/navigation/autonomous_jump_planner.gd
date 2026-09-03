@@ -39,7 +39,8 @@ var debug_draw_enabled: bool = false
 
 var stats: Dictionary = {
 	"plans_started": 0, "success": 0, "failed": 0, "cancelled": 0,
-	"walk_jump_success": 0, "run_jump_success": 0, "drop_success": 0
+	"walk_jump_success": 0, "run_jump_success": 0, "drop_success": 0,
+	"partial_edge_grab": 0
 }
 
 func _init(p_cat: Node2D = null, p_cmd: Node = null, p_graph: RefCounted = null, p_world: Node2D = null) -> void:
@@ -257,6 +258,15 @@ func _update_ready_to_jump(_delta: float) -> void:
 func _update_airborne(delta: float) -> void:
 	if current_plan == null: cancel_plan("NO_PLAN"); return
 	current_plan.elapsed_airborne += delta
+
+	if int(cat.current_state) == 8: # Cat.CatState.EDGE_HANG
+		var grabbed_id: String = str(cat.grabbed_surface_id) if "grabbed_surface_id" in cat else ""
+		stats["partial_edge_grab"] = int(stats.get("partial_edge_grab", 0)) + 1
+		print("[Planner] Traversal SUSPENDED_ON_EDGE: Cat grabbed edge of %s (target=%s)" % [grabbed_id, current_plan.target_surface_id])
+		cooldown_timer = randf_range(3.0, 6.0)
+		current_phase = TraversalPhase.IDLE
+		current_plan = null
+		return
 
 	if current_plan.elapsed_airborne > float(current_plan.timeout):
 		fail_plan("AIRBORNE_TIMEOUT"); return

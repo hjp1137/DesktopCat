@@ -43,7 +43,16 @@
   - 智能边加权选取与 Top-3 轮盘随机选择，结合助跑跑道物理检查（$\ge 35\text{ px}$）与历史去重惩罚；
   - 惯性起跳 Handover（到起跳点直接触发 JUMP 继承水平速度），飞行过程 100% 依赖 T13 Cat Physics（无 Teleport、无 Tween、无空中作弊吸附）；
   - 偏离目标判定为 `MISSED_TARGET` 并实施短期黑名单隔离；用户显式命令与鼠标拖拽（DRAG）最高优先级立即熔断；
-  - 支持 `F15`（免 Fn 键 `X` 切换、`P` 键单次触发规划）调试视图，绘制起跳点、落地区间与 Predicted Arc 抛物线。
+  - **T19**：**平台抓边与悬挂系统 (Platform Edge Grab & Hang)**：
+  - 新增状态 `CatState.EDGE_HANG`，悬挂时 `is_grounded = false`，`current_surface_id` 清空，停止重力物理模拟；
+  - 建立稳定双前爪抓点偏移（`offset_x = 12.0`, `offset_y = -20.0`），Swept Platform Landing 优先于抓边；
+  - 抓边容差控制：`EDGE_GRAB_X_TOLERANCE = 14.0`, `EDGE_GRAB_Y_TOLERANCE = 20.0`，速度上限 `MAX_EDGE_GRAB_VERTICAL_SPEED = 600.0`, `MAX_EDGE_GRAB_HORIZONTAL_SPEED = 280.0`，限定外侧接近，绝不强行磁吸；
+  - 抓左端点面向右，抓右端点面向左，悬挂偏移 `EDGE_HANG_OFFSET_X = 6.0`, `EDGE_HANG_OFFSET_Y = 18.0`；
+  - 支持动态表面移动跟随与超大位移（$> 150\text{ px}$）安全脱落，表面消失时自动尝试等价重绑（Rebind）；
+  - AUTO 模式悬挂 2.0～3.5 秒后自动释放，COMMAND 模式持续保持；新增 `RELEASE_EDGE` 指令（按键 `G`，悬挂时释放脱手，其余状态保留 F14 切换）；
+  - 鼠标拖拽（`DRAG`）最高优先级瞬间解除悬挂；T18 规划器协同记录 `PARTIAL_EDGE_GRAB`；
+  - 支持 `F16`（免 Fn 键 `Z`）调试视图，实时绘制端点、L/R 标记、Grab Zone 方框与抓点；
+  - 明确：当前阶段仅实现 Grab + Hang + Release，不能 Climb Up（留待 T20）。
 
 ## 运行方式与快捷键
 
@@ -56,9 +65,10 @@
   - `F11` / `K` / `O` / `U`：切换【UI Automation 控件几何】调试线框
   - `F12` / `J`：切换【Visual Geometry 视觉几何】调试线框
   - `F13` / `H` / `Y`：切换【Unified Surface Fusion 融合诊断】HUD 视图
-  - `F14` / `G`：切换【Platform Navigation Graph 平台导航图】调试线框（按 `T` 输出当前导航摘要）
+  - `F14` / `G`：切换【Platform Navigation Graph 平台导航图】调试线框（小猫悬挂时按 `G` 触发 RELEASE_EDGE，按 `T` 输出当前导航摘要）
   - `F15` / `X`：切换【Autonomous Jump Planner 自主跳跃规划】调试视图（按 `P` 单次触发自主规划）
-  - `TAB`：切换多显示器并重新生成表面与清理UI缓存
+  - `F16` / `Z`：切换【Edge Grab 平台边缘抓取】调试视图（显示端点、判定框与抓取爪点）
+  - `TAB`：切换多显示器并重新生成表面与清理UI缓存（悬挂时自动安全脱落）
   - `C`：切换指针好奇跟随模式
   - `ESC` / `Alt + F4`：安全退出
 

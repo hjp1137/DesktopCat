@@ -21,7 +21,9 @@ const ALLOWED_COMMANDS: Dictionary = {
 	"WAKE": CommandManager.CatCommand.WAKE,
 	"LOOK_AT_POSITION": CommandManager.CatCommand.LOOK_AT_POSITION,
 	"MOVE_TO_POSITION": CommandManager.CatCommand.MOVE_TO_POSITION,
-	"CLEAR_TARGET": CommandManager.CatCommand.CLEAR_TARGET
+	"CLEAR_TARGET": CommandManager.CatCommand.CLEAR_TARGET,
+	"RELEASE_EDGE": CommandManager.CatCommand.RELEASE_EDGE,
+	"DROP_FROM_EDGE": CommandManager.CatCommand.RELEASE_EDGE
 }
 
 var port: int = DEFAULT_PORT
@@ -276,6 +278,11 @@ func _handle_command_message(data: Dictionary) -> void:
 		if is_instance_valid(autonomous_jump_planner) and autonomous_jump_planner.has_method("try_plan_traversal"):
 			planned = autonomous_jump_planner.try_plan_traversal()
 		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name, "planned": planned})
+		return
+	if cmd_name in ["TOGGLE_DEBUG_EDGE_GRAB", "TOGGLE_DEBUG_EDGE"]:
+		if is_instance_valid(cat) and cat.has_method("toggle_edge_grab_debug"):
+			cat.toggle_edge_grab_debug()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
 		return
 
 

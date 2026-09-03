@@ -17,7 +17,8 @@ enum CatCommand {
 	WAKE,
 	LOOK_AT_POSITION,
 	MOVE_TO_POSITION,
-	CLEAR_TARGET
+	CLEAR_TARGET,
+	RELEASE_EDGE
 }
 
 signal command_dispatched(cmd: CatCommand, payload: Dictionary)

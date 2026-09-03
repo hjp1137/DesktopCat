@@ -174,7 +174,11 @@ func _unhandled_input(event: InputEvent) -> void:
 func _handle_key_event(event: InputEventKey) -> bool:
 	match event.keycode:
 		KEY_ESCAPE: print("[Main] 接收到 ESC 键，安全退出。"); get_tree().quit(); return true
-		KEY_TAB: _apply_screen_layout((current_target_screen + 1) % DisplayServer.get_screen_count()); return true
+		KEY_TAB:
+			if is_instance_valid(cat) and cat.current_state == Cat.CatState.EDGE_HANG:
+				cat.release_edge()
+			_apply_screen_layout((current_target_screen + 1) % DisplayServer.get_screen_count())
+			return true
 		KEY_F8, KEY_MINUS, KEY_EQUAL, KEY_QUOTELEFT, KEY_V, KEY_W:
 			if window_world_model and window_world_model.has_method("toggle_debug_draw"):
 				window_world_model.toggle_debug_draw()
@@ -199,13 +203,24 @@ func _handle_key_event(event: InputEventKey) -> bool:
 			if surface_fusion_builder and surface_fusion_builder.has_method("toggle_debug_diagnostics"):
 				surface_fusion_builder.toggle_debug_diagnostics()
 			return true
-		KEY_F14, KEY_G:
+		KEY_G:
+			if is_instance_valid(cat) and cat.current_state == Cat.CatState.EDGE_HANG:
+				command_manager.send_command(CommandManager.CatCommand.RELEASE_EDGE)
+				return true
+			if platform_navigation_graph and platform_navigation_graph.has_method("toggle_debug_draw"):
+				platform_navigation_graph.toggle_debug_draw()
+			return true
+		KEY_F14:
 			if platform_navigation_graph and platform_navigation_graph.has_method("toggle_debug_draw"):
 				platform_navigation_graph.toggle_debug_draw()
 			return true
 		KEY_F15, KEY_X:
 			if autonomous_jump_planner and autonomous_jump_planner.has_method("toggle_debug_draw"):
 				autonomous_jump_planner.toggle_debug_draw()
+			return true
+		KEY_F16, KEY_Z:
+			if is_instance_valid(cat) and cat.has_method("toggle_edge_grab_debug"):
+				cat.toggle_edge_grab_debug()
 			return true
 		KEY_P:
 			if autonomous_jump_planner and autonomous_jump_planner.has_method("try_plan_traversal"):

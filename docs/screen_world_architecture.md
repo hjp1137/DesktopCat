@@ -19,17 +19,19 @@
      └─ [VisualWorldModel] (F12 视觉线条与矩形)
                    ↓ (T16 SurfaceFusionBuilder: Debounce / Dedup / Merge / Grace)
 [SurfaceWorldModel (唯一物理世界入口)] (F9 物理表面，汇聚三路感知)
-                   ├─ (T13 Multi-Surface Physics: Swept Landing / One-Way / Move Follow)
-                   │    ↓
-                   │  [Cat Physics & Behavior] (在窗口、按钮、文本、视觉线条上真实着陆与生活行走)
-                   │
-                   └─ (T17 Platform Navigation Graph: 150ms Debounce / Ballistics / Swept Occlusion)
-                        ↓
-                      [PlatformNavigationGraph] (F14/G/T: JUMP_WALK, JUMP_RUN, DROP 有向可达图与查询 API)
-                        ↓
-                      [AutonomousJumpPlanner] (T18: F15/X/P: Top-3 Selection / Run-Up Check / Inertial Jump)
-                        ↓
-                      [CommandManager] ──> [Cat Physics (T13 Swept Landing)]
+                    ├─ (T13 Multi-Surface Physics: Swept Landing / One-Way / Move Follow)
+                    │    ↓
+                    │  [Cat Physics & Behavior] (在窗口、按钮、文本、视觉线条上真实着陆与生活行走)
+                    │    ↓
+                    │  [Edge Grab & Hang System] (T19: F16/Z/G: Swept Grab / Grab Zone / Outside Approach / Hang & Release)
+                    │
+                    └─ (T17 Platform Navigation Graph: 150ms Debounce / Ballistics / Swept Occlusion)
+                         ↓
+                       [PlatformNavigationGraph] (F14/G/T: JUMP_WALK, JUMP_RUN, DROP 有向可达图与查询 API)
+                         ↓
+                       [AutonomousJumpPlanner] (T18: F15/X/P: Top-3 Selection / Run-Up Check / Inertial Jump / Partial Grab)
+                         ↓
+                       [CommandManager] ──> [Cat Physics (T13 Swept Landing / T19 Edge Grab)]
 ```
 
 ## 3. 阶段演进规划
@@ -41,6 +43,6 @@
 6. **T16（已完成）**：统一表面融合与几何简化（Unified Surface Fusion & Simplification）；
 7. **T17（已完成）**：平台导航图系统 (Platform Navigation Graph)；
 8. **T18（已完成）**：自主跳跃规划与执行系统 (Autonomous Jump Planner & Execution)，完全零作弊物理穿越；
-9. **T19**：抓边与攀爬系统 (Edge Grab + Climb)；
-10. **T20**：自主探索系统 (Autonomous Exploration)。
-
+9. **T19（已完成）**：平台抓边与悬挂系统 (Platform Edge Grab & Hang)，实现临界边缘抓取、动态跟随与释放；
+10. **T20**：边缘攀爬翻越系统 (Edge Climb-Up)；
+11. **T21**：垂直墙面攀爬与全域探索系统 (Wall / Vertical Climbing & Exploration)。

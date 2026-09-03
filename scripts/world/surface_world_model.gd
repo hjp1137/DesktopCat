@@ -9,6 +9,7 @@ signal surface_world_updated(revision: int)
 const MAX_SURFACES: int = 2048
 const MIN_PLATFORM_LENGTH: float = 48.0
 const MIN_WALL_LENGTH: float = 48.0
+const MIN_EDGE_GRAB_SURFACE_LENGTH: float = 32.0
 
 var surface_revision: int = 0
 var surfaces_by_id: Dictionary = {}
@@ -192,6 +193,41 @@ func find_crossed_walkable_surface(prev_foot_y: float, next_foot_y: float, foot_
 					min_y = sy
 					best_surf = s
 	return best_surf
+
+func get_grabbable_edges_in_rect(query_rect: Rect2) -> Array:
+	var results: Array = []
+	for s in surfaces_by_id.values():
+		if not s.walkable or s.surface_type != SurfaceClass.SurfaceType.PLATFORM or s.orientation != SurfaceClass.Orientation.TOP:
+			continue
+		if s.source_type == "SCREEN" or s.id.begins_with("screen:"):
+			continue
+		var surf_len: float = absf(s.x2 - s.x1)
+		if surf_len < MIN_EDGE_GRAB_SURFACE_LENGTH:
+			continue
+		var p_left := Vector2(minf(s.x1, s.x2), s.y1)
+		var p_right := Vector2(maxf(s.x1, s.x2), s.y1)
+		if query_rect.has_point(p_left) or query_rect.grow(12.0).has_point(p_left):
+			results.append({ "surface": s, "surface_id": s.id, "side": -1, "x": p_left.x, "y": p_left.y, "pos": p_left })
+		if query_rect.has_point(p_right) or query_rect.grow(12.0).has_point(p_right):
+			results.append({ "surface": s, "surface_id": s.id, "side": 1, "x": p_right.x, "y": p_right.y, "pos": p_right })
+	return results
+
+func find_equivalent_edge_near(old_pos: Vector2, side: int, tolerance: float = 16.0) -> Dictionary:
+	var best_edge: Dictionary = {}
+	var min_dist: float = tolerance
+	for s in surfaces_by_id.values():
+		if not s.walkable or s.surface_type != SurfaceClass.SurfaceType.PLATFORM or s.orientation != SurfaceClass.Orientation.TOP:
+			continue
+		if s.source_type == "SCREEN" or s.id.begins_with("screen:"):
+			continue
+		if absf(s.x2 - s.x1) < MIN_EDGE_GRAB_SURFACE_LENGTH:
+			continue
+		var edge_pos: Vector2 = Vector2(minf(s.x1, s.x2), s.y1) if side == -1 else Vector2(maxf(s.x1, s.x2), s.y1)
+		var d := edge_pos.distance_to(old_pos)
+		if d <= min_dist:
+			min_dist = d
+			best_edge = { "surface": s, "surface_id": s.id, "side": side, "x": edge_pos.x, "y": edge_pos.y, "pos": edge_pos }
+	return best_edge
 
 func _draw() -> void:
 

@@ -627,6 +627,175 @@ func _init() -> void:
 	assert(planner.stats["cancelled"] >= 1, "取消计数应增加")
 	print("[PASS] 测试 50: 用户显式命令与 DRAG 中断取消验证成功")
 
+	# ========== T19 Edge Grab 单元测试 ==========
+	var GrabbedEdgeClass = load("res://scripts/world/grabbed_edge.gd")
+
+	# 测试 51: GrabbedEdge 数据结构与属性
+	var ge = GrabbedEdgeClass.new("surf_test", GrabbedEdgeClass.Side.LEFT, 150.0, 300.0)
+	assert(ge.surface_id == "surf_test" and ge.edge_side == -1, "字段赋值正确")
+	assert(ge.get_edge_position() == Vector2(150.0, 300.0), "位置向量正确")
+	assert(ge.get_side_name() == "LEFT", "侧别名称正确")
+	var ge_dict = ge.to_dict()
+	assert(ge_dict.edge_side == "LEFT" and ge_dict.edge_x == 150.0, "to_dict 序列化正确")
+	print("[PASS] 测试 51: GrabbedEdge 数据结构与属性验证成功")
+
+	# 测试 52: SurfaceWorldModel 平台左右端点提取与屏幕边界过滤
+	var s_test_plat = SurfaceClass.new("plat_normal", "wP", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 200.0, 400.0, 350.0, 400.0, true, true)
+	var s_test_short = SurfaceClass.new("plat_short", "wP", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 100.0, 400.0, 120.0, 400.0, true, true)
+	surf_model.surfaces_by_id = {
+		"plat_normal": s_test_plat,
+		"plat_short": s_test_short,
+		"screen:ground": s_ground
+	}
+	var q_all = Rect2(50.0, 350.0, 400.0, 100.0)
+	var edges_found = surf_model.get_grabbable_edges_in_rect(q_all)
+	assert(edges_found.size() == 2, "应仅提取正常平台的左右两个端点(排除短平台和屏幕地面)")
+	var sides_found: Array = [edges_found[0].side, edges_found[1].side]
+	assert(sides_found.has(-1) and sides_found.has(1), "应包含 LEFT(-1) 与 RIGHT(1) 端点")
+	print("[PASS] 测试 52: 平台端点提取与屏幕/过短平台过滤验证成功")
+
+	# 测试 53: 正常 Swept Platform Landing 优先于 Edge Grab
+	cat.current_mode = Cat.ControlMode.COMMAND
+	cat.current_surface_id = ""
+	cat.is_grounded = false
+	cat.position = Vector2(275.0, 380.0) # 位于平台正中间上方
+	cat.vertical_velocity = 200.0
+	cat.change_state(Cat.CatState.FALL)
+	cat.update_state(0.15) # 下落穿过 y=400 平台
+	assert(cat.is_grounded == true, "平台正中间下落应优先 Landing 着陆")
+	assert(cat.current_state != Cat.CatState.EDGE_HANG, "正常落地绝不应被误判为抓边")
+	assert(cat.current_surface_id == "plat_normal", "成功着陆在目标平台上")
+	print("[PASS] 测试 53: 正常 Swept Landing 优先于 Edge Grab 验证成功")
+
+	# 测试 54: 左端点抓取 (LEFT Edge Grab)
+	cat.current_mode = Cat.ControlMode.COMMAND
+	cat.is_grounded = false
+	cat.current_surface_id = ""
+	cat.ground_y = 800.0
+	cat.position = Vector2(190.0, 412.0) # 位于左端点(200, 400)左外侧，前爪在(202, 392)
+	cat.direction = 1.0
+	cat.vertical_velocity = 150.0
+	cat.change_state(Cat.CatState.FALL)
+	cat.update_state(0.08) # 前爪扫掠穿过 (200, 400)
+	assert(cat.current_state == Cat.CatState.EDGE_HANG, "下落扫掠经过左端点应成功进入 EDGE_HANG")
+	assert(cat.grabbed_surface_id == "plat_normal", "抓住对应平台ID")
+	assert(cat.grabbed_edge != null and cat.grabbed_edge.edge_side == -1, "抓取的侧别应为 LEFT(-1)")
+	assert(cat.direction == 1.0, "抓左端点时小猫朝向应面向平台(朝右)")
+	assert(cat.is_grounded == false, "悬挂时 is_grounded 必须为 false")
+	assert(cat.vertical_velocity == 0.0, "悬挂时垂直速度必须清零")
+	print("[PASS] 测试 54: 左端点抓边与悬挂姿态验证成功")
+
+	# 测试 55: 右端点抓取 (RIGHT Edge Grab)
+	cat.release_edge()
+	cat.is_grounded = false
+	cat.current_surface_id = ""
+	cat.ground_y = 800.0
+	cat.position = Vector2(360.0, 412.0) # 位于右端点(350, 400)右外侧，左前爪在(348, 392)
+	cat.direction = -1.0
+	cat.vertical_velocity = 150.0
+	cat.change_state(Cat.CatState.FALL)
+	cat.update_state(0.08) # 前爪扫掠穿过 (350, 400)
+	assert(cat.current_state == Cat.CatState.EDGE_HANG, "下落扫掠经过右端点应成功进入 EDGE_HANG")
+	assert(cat.grabbed_edge != null and cat.grabbed_edge.edge_side == 1, "抓取的侧别应为 RIGHT(1)")
+	assert(cat.direction == -1.0, "抓右端点时小猫朝向应面向平台(朝左)")
+	print("[PASS] 测试 55: 右端点抓边与朝向自适应验证成功")
+
+	# 测试 56: 速度超限与距离过远拒绝抓边 (零磁吸)
+	cat.release_edge()
+	cat.is_grounded = false
+	cat.ground_y = 800.0
+	cat.position = Vector2(190.0, 412.0)
+	cat.vertical_velocity = 800.0 # 超过 MAX_EDGE_GRAB_VERTICAL_SPEED(600)
+	cat.change_state(Cat.CatState.FALL)
+	cat.update_state(0.05)
+	assert(cat.current_state == Cat.CatState.FALL, "高速坠落或超速抛掷时应当拒绝抓边")
+	cat.position = Vector2(120.0, 412.0) # 距离端点 80px，差太远
+	cat.vertical_velocity = 150.0
+	cat.update_state(0.05)
+	assert(cat.current_state == Cat.CatState.FALL, "超出容差范围绝不发生磁吸")
+	print("[PASS] 测试 56: 速度超限与过远拒绝抓边验证成功")
+
+	# 测试 57: RELEASE_EDGE 指令执行与脱手下落
+	cat.position = Vector2(190.0, 412.0)
+	cat.vertical_velocity = 150.0
+	cat.direction = 1.0
+	cat.ground_y = 800.0
+	cat.change_state(Cat.CatState.FALL)
+	cat.update_state(0.08)
+	assert(cat.current_state == Cat.CatState.EDGE_HANG, "应重新进入 EDGE_HANG")
+	cmd_mgr.send_command(CommandManager.CatCommand.RELEASE_EDGE)
+	assert(cat.current_state == Cat.CatState.FALL, "RELEASE_EDGE 指令应使小猫脱离悬挂进入 FALL")
+	assert(cat.grabbed_edge == null, "释放后 grabbed_edge 应清空")
+	print("[PASS] 测试 57: RELEASE_EDGE 指令执行与脱手下落验证成功")
+
+	# 测试 58: 悬挂状态下 DRAG 最高优先级脱扣
+	cat.position = Vector2(190.0, 412.0)
+	cat.vertical_velocity = 150.0
+	cat.direction = 1.0
+	cat.ground_y = 800.0
+	cat.change_state(Cat.CatState.FALL)
+	cat.update_state(0.08)
+	assert(cat.current_state == Cat.CatState.EDGE_HANG, "应进入悬挂状态")
+	cmd_mgr.send_command(CommandManager.CatCommand.DRAG_START, { "mouse_pos": cat.position })
+	assert(cat.current_state == Cat.CatState.DRAG, "DRAG 拥有最高优先级，应瞬间脱扣悬挂")
+	assert(cat.grabbed_edge == null, "拖拽时抓边数据必须已清除")
+	cmd_mgr.send_command(CommandManager.CatCommand.DRAG_END, { "throw_velocity": Vector2.ZERO })
+	print("[PASS] 测试 58: 悬挂状态下 DRAG 瞬间脱扣验证成功")
+
+	# 测试 59: 动态表面位移跟随、超限脱落与 Rebind
+	cat.position = Vector2(190.0, 412.0)
+	cat.vertical_velocity = 150.0
+	cat.direction = 1.0
+	cat.ground_y = 800.0
+	cat.change_state(Cat.CatState.FALL)
+	cat.update_state(0.08)
+	assert(cat.current_state == Cat.CatState.EDGE_HANG, "进入悬挂状态")
+	var prev_cat_pos = cat.position
+	# 模拟平台向右平移 10px
+	s_test_plat.x1 += 10.0; s_test_plat.x2 += 10.0
+	cat.update_state(0.016)
+	assert(absf(cat.position.x - (prev_cat_pos.x + 10.0)) < 0.1, "悬挂时应跟随平台端点位移")
+	# 模拟平台端点大幅跳变 200px (超限)
+	s_test_plat.x1 += 200.0; s_test_plat.x2 += 200.0
+	cat.update_state(0.016)
+	assert(cat.current_state == Cat.CatState.FALL, "端点大幅位移超过 150px 时应安全脱落")
+	# 测试 Rebind: 抓新平台后删除原表面，替换为同位置新ID表面
+	s_test_plat.x1 = 200.0; s_test_plat.x2 = 350.0
+	cat.position = Vector2(190.0, 412.0)
+	cat.vertical_velocity = 150.0
+	cat.direction = 1.0
+	cat.ground_y = 800.0
+	cat.change_state(Cat.CatState.FALL)
+	cat.update_state(0.08)
+	assert(cat.current_state == Cat.CatState.EDGE_HANG, "进入悬挂状态")
+	surf_model.surfaces_by_id.erase("plat_normal")
+	var s_test_rebind = SurfaceClass.new("plat_rebound", "wP", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 202.0, 400.0, 350.0, 400.0, true, true)
+	surf_model.surfaces_by_id["plat_rebound"] = s_test_rebind
+	cat.update_state(0.016)
+	assert(cat.current_state == Cat.CatState.EDGE_HANG and cat.grabbed_surface_id == "plat_rebound", "几何相近时应成功重绑新边缘")
+	surf_model.surfaces_by_id.erase("plat_rebound")
+	cat.update_state(0.016)
+	assert(cat.current_state == Cat.CatState.FALL, "无等价边缘时应安全脱手下落")
+	print("[PASS] 测试 59: 动态位移跟随、超限脱落与 Rebind 验证成功")
+
+	# 测试 60: T18 自主规划器与 EDGE_HANG 协同
+	surf_model.surfaces_by_id["Top"] = s_top
+	surf_model.surfaces_by_id["Mid"] = s_mid
+	cat.current_surface_id = "Top"
+	cat.is_grounded = true
+	cat.current_mode = Cat.ControlMode.AUTO
+	cat.change_state(Cat.CatState.WALK)
+	planner.cooldown_timer = 0.0
+	assert(planner.try_plan_traversal() == true, "自主规划应当成功")
+	planner.current_phase = AutonomousJumpPlannerClass.TraversalPhase.AIRBORNE
+	cat.is_grounded = false
+	cat.grabbed_surface_id = planner.current_plan.target_surface_id
+	cat.change_state(Cat.CatState.EDGE_HANG)
+	planner.update(0.016)
+	assert(planner.current_phase == AutonomousJumpPlannerClass.TraversalPhase.IDLE, "抓住目标边缘后规划器应结束当前穿越")
+	assert(planner.stats["partial_edge_grab"] >= 1, "partial_edge_grab 统计计数增加")
+	assert(cat.current_state == Cat.CatState.EDGE_HANG, "规划器绝不应破坏小猫当前的 EDGE_HANG 状态")
+	print("[PASS] 测试 60: T18 自主规划器与 EDGE_HANG 协同验证成功")
 
 	fusion_builder.queue_free()
 	vis_model.queue_free()
@@ -636,7 +805,7 @@ func _init() -> void:
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
 	planner.queue_free()
-	print("========== T18 Autonomous Jump Planner 单元测试全部通过 ==========")
+	print("========== T19 Edge Grab 单元测试全部通过 (共60项测试) ==========")
 	quit(0)
 
 
