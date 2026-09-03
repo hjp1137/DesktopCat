@@ -29,6 +29,7 @@ var cat: Node2D = null
 var command_manager: Node = null
 var platform_navigation_graph: RefCounted = null
 var surface_world_model: Node2D = null
+var exploration_controller: Node2D = null
 
 var autonomous_traversal_enabled: bool = true
 var auto_trigger_probability: float = 0.35
@@ -136,6 +137,8 @@ func can_plan_traversal() -> bool:
 	return edges.size() > 0
 
 func _update_idle(_delta: float) -> void:
+	if is_instance_valid(exploration_controller):
+		return
 	if not can_plan_traversal(): return
 	if randf() < (auto_trigger_probability * 0.05):
 		try_plan_traversal()
@@ -504,8 +507,11 @@ func complete_route_success() -> void:
 		print("[Planner] Traversal SUCCESS: -> %s" % current_route.goal_surface_id)
 	cooldown_timer = randf_range(3.5, 7.0)
 	current_phase = TraversalPhase.IDLE
+	var landed_s: String = str(cat.current_surface_id) if is_instance_valid(cat) else ""
 	current_route = null
 	current_plan = null
+	if is_instance_valid(exploration_controller) and exploration_controller.has_method("notify_route_completed"):
+		exploration_controller.notify_route_completed(landed_s)
 	if is_instance_valid(command_manager):
 		command_manager.send_command(CommandManager.CatCommand.RESUME_AUTO)
 
@@ -525,6 +531,8 @@ func fail_route(reason: String) -> void:
 	current_phase = TraversalPhase.IDLE
 	current_route = null
 	current_plan = null
+	if is_instance_valid(exploration_controller) and exploration_controller.has_method("notify_route_failed"):
+		exploration_controller.notify_route_failed(reason)
 	if is_instance_valid(cat) and bool(cat.is_grounded) and is_instance_valid(command_manager):
 		command_manager.send_command(CommandManager.CatCommand.RESUME_AUTO)
 
@@ -535,6 +543,8 @@ func cancel_route(reason: String) -> void:
 	current_phase = TraversalPhase.IDLE
 	current_route = null
 	current_plan = null
+	if is_instance_valid(exploration_controller) and exploration_controller.has_method("notify_route_cancelled"):
+		exploration_controller.notify_route_cancelled(reason)
 	if is_instance_valid(cat) and bool(cat.is_grounded) and is_instance_valid(command_manager):
 		command_manager.send_command(CommandManager.CatCommand.RESUME_AUTO)
 

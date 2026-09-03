@@ -10,6 +10,9 @@ const NavigationNodeClass = preload("res://scripts/navigation/navigation_node.gd
 const NavigationEdgeClass = preload("res://scripts/navigation/navigation_edge.gd")
 const PlatformNavigationGraphClass = preload("res://scripts/navigation/platform_navigation_graph.gd")
 const WallAttachmentClass = preload("res://scripts/world/wall_attachment.gd")
+const ExplorationGoalClass = preload("res://scripts/exploration/exploration_goal.gd")
+const ExplorationMemoryClass = preload("res://scripts/exploration/exploration_memory.gd")
+const ScreenExplorationControllerClass = preload("res://scripts/exploration/screen_exploration_controller.gd")
 
 func _init() -> void:
 
@@ -1398,7 +1401,155 @@ func _init() -> void:
 	assert(planner_t22.current_route == null, "Scale 发生变化时安全取消当前路线")
 	print("[PASS] 测试 105: 缩放突变触发安全取消机制验证成功")
 
+	# 测试 106: ExplorationGoal 数据结构、字段初始化与字典序列化
+	var goal_t106 = ExplorationGoalClass.new("g1", "plat_target", Vector2(400.0, 250.0), ExplorationGoalClass.GoalType.ASCEND, 8.5, 3.2, ["NOVEL", "UPWARD"])
+	assert(goal_t106.goal_id == "g1", "goal_id 正确赋值")
+	assert(goal_t106.target_surface_id == "plat_target", "target_surface_id 正确赋值")
+	assert(goal_t106.get_goal_type_name() == "ASCEND", "GoalType 枚举转字符串正确")
+	var g_dict: Dictionary = goal_t106.to_dict()
+	assert(g_dict.has("goal_id") and float(g_dict.get("score", 0.0)) == 8.5, "to_dict 包含完整元数据")
+	print("[PASS] 测试 106: ExplorationGoal 数据结构与属性序列化验证成功")
+
+	# 测试 107: ExplorationMemory 记录访问、列表上限与时间半衰期衰减
+	var mem_test = ExplorationMemoryClass.new()
+	mem_test.record_visit("surf_a", "MID", "start->surf_a")
+	assert(mem_test.recent_surfaces.has("surf_a"), "访问记录成功压入 recent_surfaces")
+	assert(int(mem_test.surface_visit_count.get("surf_a", 0)) == 1, "访问计数记录为 1")
+	var decayed_cnt: float = mem_test.get_decayed_visit_count("surf_a")
+	assert(decayed_cnt > 0.9 and decayed_cnt <= 1.0, "刚访问时的衰减计数接近 1.0")
+	print("[PASS] 测试 107: ExplorationMemory 访问记录与时间半衰期衰减计算验证成功")
+
+	# 测试 108: ExplorationMemory 周期 2 (A-B-A-B) 小循环检测
+	var mem_loop2 = ExplorationMemoryClass.new()
+	for s_id in ["surf_x", "surf_y", "surf_x", "surf_y"]:
+		mem_loop2.record_visit(s_id)
+	var l2_res: Dictionary = mem_loop2.detect_loop()
+	assert(bool(l2_res.get("is_loop", false)) == true, "成功检测出周期 2 小循环")
+	assert(int(l2_res.get("period", 0)) == 2, "循环周期识别为 2")
+	print("[PASS] 测试 108: 周期 2 (A-B-A-B) 小循环检测验证成功")
+
+	# 测试 109: ExplorationMemory 周期 3 (A-B-C-A-B-C) 小循环检测
+	var mem_loop3 = ExplorationMemoryClass.new()
+	for s_id in ["surf_1", "surf_2", "surf_3", "surf_1", "surf_2", "surf_3"]:
+		mem_loop3.record_visit(s_id)
+	var l3_res: Dictionary = mem_loop3.detect_loop()
+	assert(bool(l3_res.get("is_loop", false)) == true, "成功检测出周期 3 小循环")
+	assert(int(l3_res.get("period", 0)) == 3, "循环周期识别为 3")
+	print("[PASS] 测试 109: 周期 3 (A-B-C-A-B-C) 小循环检测验证成功")
+
+	# 测试 110: ExplorationMemory 卡滞停滞检测 (detect_stuck)
+	var mem_stuck = ExplorationMemoryClass.new()
+	for i in range(8):
+		mem_stuck.record_visit("surf_isolated_1" if (i % 2 == 0) else "surf_isolated_2")
+	assert(mem_stuck.detect_stuck(5) == true, "在候选丰富但只访问2个表面时识别为卡滞")
+	assert(mem_stuck.detect_stuck(2) == false, "在世界本来就只有2个表面时不误报卡滞")
+	print("[PASS] 测试 110: ExplorationMemory 卡滞停滞检测验证成功")
+
+	# 测试 111: ExplorationMemory 失效表面清理与最大条目上限保护
+	var mem_cleanup = ExplorationMemoryClass.new()
+	mem_cleanup.record_visit("surf_valid")
+	mem_cleanup.record_visit("surf_old")
+	mem_cleanup.cleanup_vanished_surfaces({ "surf_valid": true })
+	assert(not mem_cleanup.surface_visit_count.has("surf_old"), "失效表面成功从计数中清除")
+	assert(mem_cleanup.surface_visit_count.has("surf_valid"), "有效表面计数保留")
+	print("[PASS] 测试 111: ExplorationMemory 失效表面清理与内存安全保护验证成功")
+
+	# 测试 112: ScreenExplorationController 初始化与对象关联
+	var exp_ctrl = ScreenExplorationControllerClass.new(cat, cmd_mgr, g_test, surf_model, planner_t22)
+	exp_ctrl.autonomous_exploration_enabled = false
+	root.add_child(exp_ctrl)
+	planner_t22.exploration_controller = exp_ctrl
+	assert(exp_ctrl.memory != null, "ExplorationMemory 初始化成功")
+	assert(exp_ctrl.traversal_planner == planner_t22, "TraversalPlanner 引用绑定正确")
+	print("[PASS] 测试 112: ScreenExplorationController 初始化与依赖注入验证成功")
+
+	# 测试 113: can_start_exploration 前置状态检查
+	cat.current_mode = Cat.ControlMode.AUTO
+	cat.is_grounded = true
+	cat.change_state(Cat.CatState.IDLE)
+	assert(exp_ctrl.can_start_exploration() == true, "正常空闲状态下可以开始探索")
+	cat.change_state(Cat.CatState.SLEEP)
+	assert(exp_ctrl.can_start_exploration() == false, "睡觉状态下禁止开始探索")
+	cat.change_state(Cat.CatState.IDLE)
+	exp_ctrl.backoff_timer = 5.0
+	assert(exp_ctrl.can_start_exploration() == false, "退避冷却中禁止开始探索")
+	exp_ctrl.backoff_timer = 0.0
+	print("[PASS] 测试 113: can_start_exploration 前置状态限制验证成功")
+
+	# 测试 114: collect_candidates 有界搜索收集候选平台节点
+	cat.current_surface_id = "p_left"
+	var candidates_found = exp_ctrl.collect_candidates()
+	assert(not candidates_found.is_empty(), "从 p_left 应当搜索到附近候选")
+	var has_ptop: bool = false
+	for cand in candidates_found:
+		if cand.target_surface_id == "p_top": has_ptop = true
+	assert(has_ptop == true, "包含通过爬墙到达的 p_top 目标")
+	print("[PASS] 测试 114: collect_candidates 有界搜索收集候选平台验证成功")
+
+	# 测试 115: score_candidates 综合评分模型验证 (Novelty 与垂直意图)
+	var scored_goals = exp_ctrl.score_candidates(candidates_found)
+	assert(not scored_goals.is_empty(), "候选评分结果不为空")
+	var top_g = scored_goals[0]
+	assert(top_g.score > 0.0, "Top 候选具备正向评分")
+	assert(top_g.reasons.size() > 0, "Top 候选记录了决策标签")
+	print("[PASS] 测试 115: score_candidates 综合评分模型验证成功")
+
+	# 测试 116: score_candidates 小循环惩罚与破圈加分 (LOOP_PENALTY)
+	for s_id in ["p_left", "p_top", "p_left", "p_top"]:
+		exp_ctrl.memory.record_visit(s_id)
+	var scored_loop = exp_ctrl.score_candidates(candidates_found)
+	var ptop_penalized: bool = false
+	for g in scored_loop:
+		if g.target_surface_id == "p_top" and g.reasons.has("LOOP_PENALTY"):
+			ptop_penalized = true
+	assert(ptop_penalized == true, "陷入小循环的目标被标记 LOOP_PENALTY 并实施惩罚")
+	print("[PASS] 测试 116: score_candidates 小循环惩罚与破圈机制验证成功")
+	exp_ctrl.memory.recent_surfaces.clear()
+
+	# 测试 117: select_goal Top-K 轮盘赌与固定种子复现
+	exp_ctrl.debug_seed = 42
+	var selected_1 = exp_ctrl.select_goal(scored_goals)
+	exp_ctrl.debug_seed = 42
+	var selected_2 = exp_ctrl.select_goal(scored_goals)
+	assert(selected_1 != null and selected_2 != null, "目标选择器成功选出目标")
+	assert(selected_1.target_surface_id == selected_2.target_surface_id, "固定随机种子可准确复现目标选择")
+	exp_ctrl.debug_seed = 0
+	print("[PASS] 测试 117: select_goal Top-K 轮盘赌加权随机与种子复现验证成功")
+
+	# 测试 118: trigger_exploration_decision 决策闭环与委派 Planner
+	cat.current_surface_id = "p_left"
+	var trigger_ok = exp_ctrl.trigger_exploration_decision(true)
+	assert(trigger_ok == true, "成功触发自主屏幕探索决策闭环")
+	assert(exp_ctrl.current_goal != null, "成功设置 current_goal")
+	assert(planner_t22.current_route != null, "成功为 Planner 提交路线执行")
+	print("[PASS] 测试 118: trigger_exploration_decision 决策闭环与委派执行验证成功")
+
+	# 测试 119: notify_route_completed 目标到达结算与 ARRIVAL_DWELL 启动
+	var target_surf_id: String = exp_ctrl.current_goal.target_surface_id
+	planner_t22.complete_route_success()
+	assert(exp_ctrl.current_goal == null, "到达后 current_goal 结算置空")
+	assert(exp_ctrl.is_dwelling == true, "进入到达停顿 (is_dwelling = true)")
+	assert(exp_ctrl.arrival_dwell_timer > 0.0, "arrival_dwell_timer 倒计时启动")
+	assert(exp_ctrl.memory.surface_visit_count.has(target_surf_id), "目标表面访问次数递增")
+	print("[PASS] 测试 119: notify_route_completed 目标到达结算与到达停顿验证成功")
+
+	# 测试 120: 意外落点容错吸收与连续失败避退保护 (EXPLORATION_BACKOFF)
+	exp_ctrl.is_dwelling = false
+	exp_ctrl.exploration_cooldown_timer = 0.0
+	exp_ctrl.trigger_exploration_decision(true)
+	assert(exp_ctrl.current_goal != null, "重新发起一次目标决策")
+	# 模拟路线失败三次
+	exp_ctrl.notify_route_failed("FALL_MISS")
+	exp_ctrl.notify_route_failed("FALL_MISS")
+	exp_ctrl.notify_route_failed("FALL_MISS")
+	assert(exp_ctrl.backoff_timer > 0.0, "连续失败3次后触发 EXPLORATION_BACKOFF 避退")
+	assert(exp_ctrl.can_start_exploration() == false, "避退期间禁止开启新探索")
+	planner_t22.cancel_route("TEST_FINISHED")
+	planner_t22.exploration_controller = null
+	print("[PASS] 测试 120: 意外落点吸收与连续失败避退保护验证成功")
+
 	planner_t22.queue_free()
+	exp_ctrl.queue_free()
 	fusion_builder.queue_free()
 	vis_model.queue_free()
 	ui_model.queue_free()
@@ -1407,7 +1558,7 @@ func _init() -> void:
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
 	planner.queue_free()
-	print("========== T22 Climb Navigation Integration 单元测试全部通过 (共105项测试) ==========")
+	print("========== T23 Autonomous Screen Exploration 单元测试全部通过 (共120项测试) ==========")
 	quit(0)
 
 

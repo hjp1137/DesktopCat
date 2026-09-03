@@ -29,27 +29,19 @@
                     │    ↓
                     │  [Vertical Wall Attachment & Climbing System] (T21: F18/U/J/G: Wall Cling / Dual Climb / Top Transition)
                     │
-                    └─ (T17 Platform Navigation Graph: 150ms Debounce / Ballistics / Swept Occlusion)
+                    └─ (T17/T22 Surface Traversal Graph: Platform + Wall Nodes / Dijkstra Route Search)
                          ↓
-                       [PlatformNavigationGraph] (F14/G/T: JUMP_WALK, JUMP_RUN, DROP 有向可达图与查询 API)
+                       [ScreenExplorationController] (T23: F21/E: Bounded BFS / Goal Scoring / Top-K Selection / Memory / Loop Break)
                          ↓
-                       [AutonomousJumpPlanner] (T18: F15/X/P: Top-3 Selection / Run-Up Check / Inertial Jump / Recovery Success)
+                       [AutonomousJumpPlanner] (T18/T22: F15/F20: TraversalRoute / Phased Execution / Wall Cling / Edge Recovery)
                          ↓
                        [CommandManager] ──> [Cat Physics (T13 Landing / T19 Grab / T20 Climb-Up / T21 Wall Climb)]
 ```
 
 ## 3. 阶段演进规划
-1. **T11（已完成）**：顶层窗口几何感知（Window Geometry Perception）；
-2. **T12（已完成）**：窗口几何转 Surface 物理世界（Surface World）；
-3. **T13（已完成）**：多表面动态物理系统（Multi-Surface Cat Physics）；
-4. **T14（已完成）**：Windows UI Automation 元素感知（UI Automation Element Perception）；
-5. **T15（已完成）**：轻量视觉几何感知（Lightweight Visual Geometry Perception）；
-6. **T16（已完成）**：统一表面融合与几何简化（Unified Surface Fusion & Simplification）；
-7. **T17（已完成）**：平台导航图系统 (Platform Navigation Graph)；
-8. **T18（已完成）**：自主跳跃规划与执行系统 (Autonomous Jump Planner & Execution)，完全零作弊物理穿越；
-9. **T19（已完成）**：平台抓边与悬挂系统 (Platform Edge Grab & Hang)，实现临界边缘抓取、动态跟随与释放；
-10. **T20（已完成）**：边缘攀爬翻越系统 (Edge Climb-Up)，实现抓边后的两段式登顶翻越与T18恢复成功闭环；
-11. **T21（已完成）**：垂直墙面附着与攀爬系统 (Vertical Wall Attachment & Climbing)，实现双向攀爬、到顶登顶与动态重绑；
-12. **T20A（已完成）**：自适应猫咪缩放与统一几何度量系统 (Adaptive Cat Scale & CatMetrics)，建立 Responsive Scale + CatMetrics 事实来源，彻底消除硬编码像素技术债；
-13. **T22**：攀爬与跳跃融合导航路径规划 (Climb & Jump Fusion Navigation)；
-14. **T23**：桌面全域自主探索与交互系统 (Autonomous Screen Exploration)。
+1. **T11～T21（已完成）**：窗口、UIA、视觉感知、物理着陆、抓边、攀爬与自适应 CatMetrics；
+2. **T22（已完成）**：攀爬与跳跃融合导航路径规划 (Climb Navigation Integration)；
+3. **T23（已完成）**：自主屏幕探索系统 (Autonomous Screen Exploration) —— **M1 核心移动与导航闭环正式达成，T23 后停止新增核心 Movement / Navigation 功能**；
+4. **T24（下一阶段）**：美术与动画全面升级 (Art & Animation Upgrade)；
+5. **T25**：M1 核心玩法集中总体验收与收口 (M1 Core Gameplay Acceptance & Consolidation)；
+6. **T26**：性能优化、稳定性与产品化打包 (Performance / Stability / Productization)。

@@ -10,6 +10,7 @@ const VisualWorldModelClass = preload("res://scripts/world/visual_world_model.gd
 const SurfaceFusionBuilderClass = preload("res://scripts/world/surface_fusion_builder.gd")
 const PlatformNavigationGraphClass = preload("res://scripts/navigation/platform_navigation_graph.gd")
 const AutonomousJumpPlannerClass = preload("res://scripts/navigation/autonomous_jump_planner.gd")
+const ScreenExplorationControllerClass = preload("res://scripts/exploration/screen_exploration_controller.gd")
 
 @onready var cat: Node2D = $Cat
 var command_manager: CommandManager = null
@@ -23,6 +24,7 @@ var visual_world_model: Node2D = null
 var surface_fusion_builder: Node2D = null
 var platform_navigation_graph: RefCounted = null
 var autonomous_jump_planner: Node2D = null
+var screen_exploration_controller: Node2D = null
 var current_target_screen: int = 0
 
 
@@ -81,6 +83,10 @@ func _ready() -> void:
 	autonomous_jump_planner = AutonomousJumpPlannerClass.new(cat, command_manager, platform_navigation_graph, surface_world_model)
 	add_child(autonomous_jump_planner)
 
+	screen_exploration_controller = ScreenExplorationControllerClass.new(cat, command_manager, platform_navigation_graph, surface_world_model, autonomous_jump_planner)
+	add_child(screen_exploration_controller)
+	autonomous_jump_planner.exploration_controller = screen_exploration_controller
+
 	window_world_model.window_world_updated.connect(func(_r): surface_fusion_builder.request_fusion())
 	ui_element_world_model.ui_world_updated.connect(func(_r): surface_fusion_builder.request_fusion())
 	visual_world_model.visual_world_updated.connect(func(_r): surface_fusion_builder.request_fusion())
@@ -98,6 +104,7 @@ func _ready() -> void:
 	external_bridge.set("surface_fusion_builder", surface_fusion_builder)
 	external_bridge.set("platform_navigation_graph", platform_navigation_graph)
 	external_bridge.set("autonomous_jump_planner", autonomous_jump_planner)
+	external_bridge.set("screen_exploration_controller", screen_exploration_controller)
 
 	add_child(external_bridge)
 
@@ -156,6 +163,10 @@ func _apply_screen_layout(screen_idx: int) -> void:
 	if is_instance_valid(cat) and cat.has_method("reset_to_ground"):
 		var foot_y_off: float = cat.foot_offset.y if "foot_offset" in cat else 26.0
 		cat.reset_to_ground(Vector2(screen_size.x / 2.0, screen_size.y - foot_y_off)); update_mouse_passthrough(cat.position)
+	if is_instance_valid(screen_exploration_controller):
+		screen_exploration_controller.notify_route_cancelled("DISPLAY_SWITCHED")
+		screen_exploration_controller.memory.recent_surfaces.clear()
+		screen_exploration_controller.last_candidates.clear()
 
 
 func update_mouse_passthrough(cat_pos: Vector2) -> void:
@@ -273,6 +284,15 @@ func _handle_key_event(event: InputEventKey) -> bool:
 		KEY_F20:
 			if autonomous_jump_planner and autonomous_jump_planner.has_method("toggle_route_debug"):
 				autonomous_jump_planner.toggle_route_debug()
+			return true
+		KEY_F21:
+			if screen_exploration_controller and screen_exploration_controller.has_method("toggle_debug_draw"):
+				screen_exploration_controller.toggle_debug_draw()
+			return true
+		KEY_E:
+			if screen_exploration_controller and screen_exploration_controller.has_method("trigger_exploration_decision"):
+				var ok: bool = screen_exploration_controller.trigger_exploration_decision(true)
+				print("[Main] E 键触发自主屏幕探索决策: %s" % ("成功启动" if ok else "未触发(无候选/正在执行)"))
 			return true
 		KEY_BRACKETLEFT:
 			if is_instance_valid(cat) and cat.has_method("adjust_user_scale"):

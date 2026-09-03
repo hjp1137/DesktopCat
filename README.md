@@ -74,6 +74,12 @@
   - 弹道分析与外侧（Outside-Side）约束验证，结合 CatMetrics 动态参数；
   - 轻量 Dijkstra 路线搜索与防环机制，支持 Direct Jump 优先与深度限制；
   - AutonomousJumpPlanner 多步执行、墙面附着过渡、EDGE_HANG 停顿、登顶结算与缩放突变安全取消。
+- **T23 自主屏幕探索系统 (Autonomous Screen Exploration)**：
+  - 构建轻量纯规则驱动的 `ScreenExplorationController` 与内存级 `ExplorationMemory`（隐私安全零落盘）；
+  - 结合 Novelty、垂直带（Vertical Interest）、平台宽度安全与路线代价实现综合评分模型；
+  - Top-K 轮盘赌加权随机决策，结合自然到达逗留（`ARRIVAL_DWELL` 1.5~4.0s）与探索冷却（`EXPLORATION_COOLDOWN` 4~10s）；
+  - 周期 2/3/4 小循环检测与 `-12.0` 破圈惩罚，连续失败触发 15s 退避（`EXPLORATION_BACKOFF`）；意外落点容错吸收为有效访问；
+  - 最高优先级保障：用户命令、拖拽、指针好奇、睡眠与挂墙/攀爬状态互斥保护；支持 `F21` 调试 HUD 与 `E` 键手动决策。
 
 ## 运行方式与快捷键
 
@@ -97,6 +103,8 @@
   - `F18`：切换【Wall Attachment 垂直墙面攀爬】调试视图（显示墙面竖线、端点与附着状态）
   - `F19`：切换【Cat Metrics 几何度量与包围盒】调试视图（显示身体、脚底、抓点、挂墙点与多边形）
   - `F20`：切换【Climb Navigation Route 攀爬融合路线规划】调试视图（按 `R` 手动触发多步攀爬路线搜索与测试）
+  - `F21`：切换【Autonomous Exploration 自主屏幕探索】调试视图（显示状态、评分榜、破圈次数与 Top 5 候选标记）
+  - `E`：手动强制触发一次【自主屏幕探索决策】（开发调试）
   - `[` / `]`：调节小猫用户缩放（User Scale -0.1 / +0.1，支持 0.70~1.60 范围）
   - `\`：重置小猫用户缩放到默认值（1.00）
   - `TAB`：切换多显示器并重新自适应计算 Base Scale 与重新贴地（挂墙、悬挂与翻越时自动安全脱落）
