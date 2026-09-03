@@ -2,11 +2,13 @@ extends Node2D
 
 const MouseControllerClass = preload("res://scripts/mouse_controller.gd")
 const MousePerceptionControllerClass = preload("res://scripts/mouse_perception_controller.gd")
+const ExternalBridgeClass = preload("res://scripts/external_bridge.gd")
 
 @onready var cat: Node2D = $Cat
 var command_manager: CommandManager = null
 var mouse_controller: Node = null
 var mouse_perception_controller: Node = null
+var external_bridge: Node = null
 var current_target_screen: int = 0
 
 func _ready() -> void:
@@ -27,6 +29,12 @@ func _ready() -> void:
 	mouse_perception_controller.set("cat", cat)
 	mouse_perception_controller.set("main_node", self)
 	add_child(mouse_perception_controller)
+	
+	external_bridge = ExternalBridgeClass.new()
+	external_bridge.set("command_manager", command_manager)
+	external_bridge.set("cat", cat)
+	external_bridge.set("main_node", self)
+	add_child(external_bridge)
 	
 	if DisplayServer.get_name() != "headless":
 		current_target_screen = get_window().current_screen
@@ -87,3 +95,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_8: command_manager.send_command(CommandManager.CatCommand.SIT)
 			KEY_9: command_manager.send_command(CommandManager.CatCommand.SLEEP)
 			KEY_0: command_manager.send_command(CommandManager.CatCommand.WAKE)
+
+func get_overlay_info() -> Dictionary:
+	var window := get_window()
+	var sz: Vector2i = window.size if window else Vector2i(1920, 1080)
+	return {
+		"screen_index": current_target_screen,
+		"width": sz.x,
+		"height": sz.y
+	}
+
