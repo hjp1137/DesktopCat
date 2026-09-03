@@ -14,7 +14,10 @@ enum CatCommand {
 	RUN_RIGHT,
 	SIT,
 	SLEEP,
-	WAKE
+	WAKE,
+	LOOK_AT_POSITION,
+	MOVE_TO_POSITION,
+	CLEAR_TARGET
 }
 
 signal command_dispatched(cmd: CatCommand, payload: Dictionary)
@@ -28,7 +31,7 @@ func register_cat(cat: Node) -> void:
 func send_command(cmd: CatCommand, payload: Dictionary = {}) -> void:
 	var keys := CatCommand.keys()
 	var cmd_name: String = keys[cmd] if cmd >= 0 and cmd < keys.size() else "UNKNOWN"
-	if cmd != CatCommand.DRAG_MOVE:
+	if cmd != CatCommand.DRAG_MOVE and cmd != CatCommand.LOOK_AT_POSITION and cmd != CatCommand.MOVE_TO_POSITION:
 		print("[CommandManager] 接收并分发指令: ", cmd_name)
 	command_dispatched.emit(cmd, payload)
 	if is_instance_valid(_cat) and _cat.has_method("handle_command"):

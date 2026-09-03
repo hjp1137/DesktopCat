@@ -23,6 +23,14 @@ var sleep_cooldown: float = 0.0
 var run_cooldown: float = 0.0
 var drag_offset: Vector2 = Vector2.ZERO
 
+var attention_target_pos: Vector2 = Vector2.ZERO
+var has_attention_target: bool = false
+var move_target_pos: Vector2 = Vector2.ZERO
+var has_move_target: bool = false
+var move_speed_mode: String = "RUN"
+var target_reached_radius: float = 50.0
+var pointer_follow_distance: float = 64.0
+
 @onready var _animated_sprite: AnimatedSprite2D = $AnimatedSprite2D
 @onready var _main_node: Node = get_parent()
 
@@ -36,7 +44,7 @@ func _process(delta: float) -> void:
 	if _main_node and _main_node.has_method("update_mouse_passthrough"): _main_node.update_mouse_passthrough(position)
 
 func reset_to_ground(target_pos: Vector2) -> void:
-	ground_y = target_pos.y; position = target_pos; vertical_velocity = 0.0; horizontal_throw_speed = 0.0; is_grounded = true
+	ground_y = target_pos.y; position = target_pos; vertical_velocity = 0.0; horizontal_throw_speed = 0.0; is_grounded = true; has_move_target = false
 	change_state(CatState.WALK if current_mode == ControlMode.AUTO else command_ground_state)
 
 func change_state(new_state: CatState) -> void:
@@ -64,6 +72,8 @@ func update_state(delta: float) -> void:
 		if horizontal_throw_speed != 0.0: _move_air_throw(delta)
 		elif current_state in [CatState.WALK, CatState.RUN]: _move_and_bounce(delta, run_speed if current_state == CatState.RUN else walk_speed)
 		if position.y >= ground_y: position.y = ground_y; vertical_velocity = 0.0; horizontal_throw_speed = 0.0; is_grounded = true; _on_land()
+	elif has_move_target and current_state not in [CatState.SLEEP, CatState.DRAG]:
+		_update_target_move(delta)
 	elif current_mode == ControlMode.AUTO:
 		state_timer -= delta
 		if state_timer <= 0.0: _schedule_next_auto_state()
@@ -72,6 +82,19 @@ func update_state(delta: float) -> void:
 	elif current_state in [CatState.WALK, CatState.RUN]:
 		_move_and_bounce(delta, run_speed if current_state == CatState.RUN else walk_speed)
 
+func _update_target_move(delta: float) -> void:
+	var vp_w := _get_viewport_size().x
+	var target_x: float = move_target_pos.x - pointer_follow_distance if move_target_pos.x > position.x else move_target_pos.x + pointer_follow_distance
+	target_x = clampf(target_x, body_radius, vp_w - body_radius)
+	var dx: float = target_x - position.x
+	if absf(dx) <= target_reached_radius:
+		if current_state in [CatState.WALK, CatState.RUN]: change_state(CatState.IDLE)
+	else:
+		direction = 1.0 if dx > 0.0 else -1.0; _get_animated_sprite().flip_h = (direction < 0.0)
+		var spd := run_speed if move_speed_mode == "RUN" else walk_speed
+		if current_state != (CatState.RUN if move_speed_mode == "RUN" else CatState.WALK): change_state(CatState.RUN if move_speed_mode == "RUN" else CatState.WALK)
+		position.x = clampf(position.x + direction * spd * delta, body_radius, vp_w - body_radius)
+
 func _schedule_next_auto_state() -> void:
 	if current_state == CatState.SLEEP: sleep_cooldown = 15.0; change_state(CatState.IDLE); return
 	if current_state == CatState.RUN: run_cooldown = 6.0; change_state(CatState.IDLE); return
@@ -79,7 +102,6 @@ func _schedule_next_auto_state() -> void:
 	if position.x > vp_w * 0.75: direction = -1.0 if randf() < 0.8 else 1.0
 	elif position.x < vp_w * 0.25: direction = 1.0 if randf() < 0.8 else -1.0
 	elif randf() < 0.5: direction = -direction
-	
 	var r := randf()
 	if r < 0.40: change_state(CatState.WALK)
 	elif r < 0.65: change_state(CatState.SIT)
@@ -98,11 +120,11 @@ func _on_land() -> void:
 	if current_mode == ControlMode.COMMAND:
 		if command_ground_state == CatState.SLEEP: command_ground_state = CatState.IDLE; sleep_cooldown = 15.0
 		change_state(command_ground_state)
-	else:
-		change_state(CatState.WALK)
+	else: change_state(CatState.WALK)
 
 func handle_command(command: int, payload: Dictionary = {}) -> void:
 	if current_state == CatState.DRAG and command < 5: print("[Cat] DRAG 期间忽略指令"); return
+	if command < 13: has_move_target = false
 	match command:
 		0: current_mode = ControlMode.COMMAND; command_ground_state = CatState.IDLE; if is_grounded: change_state(CatState.IDLE)
 		1: current_mode = ControlMode.COMMAND; direction = -1.0; command_ground_state = CatState.WALK; if is_grounded: change_state(CatState.WALK)
@@ -130,6 +152,16 @@ func handle_command(command: int, payload: Dictionary = {}) -> void:
 		10: current_mode = ControlMode.COMMAND; command_ground_state = CatState.SIT; if is_grounded: change_state(CatState.SIT)
 		11: current_mode = ControlMode.COMMAND; command_ground_state = CatState.SLEEP; if is_grounded: change_state(CatState.SLEEP)
 		12: if current_state == CatState.SLEEP: sleep_cooldown = 15.0; change_state(CatState.IDLE); print("[Cat] 被唤醒并进入 IDLE")
+		13: # LOOK_AT_POSITION
+			if current_state in [CatState.SLEEP, CatState.DRAG]: return
+			attention_target_pos = payload.get("target_pos", Vector2.ZERO); has_attention_target = true
+			if current_state in [CatState.IDLE, CatState.SIT] and absf(attention_target_pos.x - position.x) > 20.0:
+				direction = 1.0 if attention_target_pos.x > position.x else -1.0; _get_animated_sprite().flip_h = (direction < 0.0)
+		14: # MOVE_TO_POSITION
+			if current_state in [CatState.SLEEP, CatState.DRAG] or not is_grounded: return
+			move_target_pos = payload.get("target_pos", Vector2.ZERO); move_speed_mode = payload.get("speed_mode", "RUN"); has_move_target = true
+		15: # CLEAR_TARGET
+			has_attention_target = false; has_move_target = false
 
 func _move_and_bounce(delta: float, cur_speed: float) -> void:
 	var vp_w := _get_viewport_size().x; position.x += direction * cur_speed * delta
@@ -139,6 +171,8 @@ func _move_and_bounce(delta: float, cur_speed: float) -> void:
 func _on_clicked() -> void:
 	print("Cat clicked!"); var sprite := _get_animated_sprite()
 	if sprite: var tw := create_tween(); tw.tween_property(sprite, "position:y", -16.0, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT); tw.tween_property(sprite, "position:y", 0.0, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	var main_p := get_parent()
+	if main_p and "mouse_perception_controller" in main_p and main_p.mouse_perception_controller: main_p.mouse_perception_controller.suppress_curiosity()
 
 func _get_animated_sprite() -> AnimatedSprite2D:
 	if not _animated_sprite: _animated_sprite = get_node_or_null("AnimatedSprite2D")
