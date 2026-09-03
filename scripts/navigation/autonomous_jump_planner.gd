@@ -40,7 +40,8 @@ var debug_draw_enabled: bool = false
 var stats: Dictionary = {
 	"plans_started": 0, "success": 0, "failed": 0, "cancelled": 0,
 	"walk_jump_success": 0, "run_jump_success": 0, "drop_success": 0,
-	"partial_edge_grab": 0, "edge_grab_recovery_success": 0
+	"partial_edge_grab": 0, "edge_grab_recovery_success": 0,
+	"target_wall_attached": 0, "partial_wall_attach": 0, "wall_climb_recovery_success": 0
 }
 
 func _init(p_cat: Node2D = null, p_cmd: Node = null, p_graph: RefCounted = null, p_world: Node2D = null) -> void:
@@ -282,6 +283,25 @@ func _update_airborne(delta: float) -> void:
 			current_plan = null
 			return
 
+	if int(cat.current_state) in [10, 11]: # Cat.CatState.WALL_CLING 或 WALL_CLIMB
+		var wall_att = cat.current_wall_attachment if "current_wall_attachment" in cat else null
+		var wall_id: String = str(wall_att.wall_surface_id) if wall_att else ""
+		var is_target_wall: bool = false
+		if wall_id != "":
+			if wall_id == current_plan.target_surface_id or wall_id.split(":")[0] == current_plan.target_surface_id.split(":")[0]:
+				is_target_wall = true
+		if is_target_wall:
+			stats["target_wall_attached"] = int(stats.get("target_wall_attached", 0)) + 1
+			current_plan.elapsed_airborne = 0.0
+			return
+		else:
+			stats["partial_wall_attach"] = int(stats.get("partial_wall_attach", 0)) + 1
+			print("[Planner] Traversal SUSPENDED_ON_WALL: Cat attached different wall %s (target=%s)" % [wall_id, current_plan.target_surface_id])
+			cooldown_timer = randf_range(3.0, 6.0)
+			current_phase = TraversalPhase.IDLE
+			current_plan = null
+			return
+
 	if current_plan.elapsed_airborne > float(current_plan.timeout):
 		fail_plan("AIRBORNE_TIMEOUT"); return
 
@@ -291,8 +311,12 @@ func _update_airborne(delta: float) -> void:
 func _on_cat_climb_completed(surface_id: String) -> void:
 	if current_phase == TraversalPhase.AIRBORNE and current_plan != null:
 		if surface_id == current_plan.target_surface_id:
-			stats["edge_grab_recovery_success"] = int(stats.get("edge_grab_recovery_success", 0)) + 1
-			print("[Planner] Target edge climbed successfully! Recovery success -> %s" % surface_id)
+			if int(stats.get("target_wall_attached", 0)) > 0:
+				stats["wall_climb_recovery_success"] = int(stats.get("wall_climb_recovery_success", 0)) + 1
+				print("[Planner] Target wall climbed successfully! Recovery success -> %s" % surface_id)
+			else:
+				stats["edge_grab_recovery_success"] = int(stats.get("edge_grab_recovery_success", 0)) + 1
+				print("[Planner] Target edge climbed successfully! Recovery success -> %s" % surface_id)
 			complete_plan_success()
 		else:
 			print("[Planner] Climbed different surface %s (expected %s)" % [surface_id, current_plan.target_surface_id])

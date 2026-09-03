@@ -10,6 +10,7 @@ const MAX_SURFACES: int = 2048
 const MIN_PLATFORM_LENGTH: float = 48.0
 const MIN_WALL_LENGTH: float = 48.0
 const MIN_EDGE_GRAB_SURFACE_LENGTH: float = 32.0
+const MIN_CLIMBABLE_WALL_LENGTH: float = 48.0
 
 var surface_revision: int = 0
 var surfaces_by_id: Dictionary = {}
@@ -131,9 +132,10 @@ func _extract_window_surfaces(win: Dictionary, all_windows: Array, out_dict: Dic
 				out_dict[s.id] = s
 
 	if r.size.y >= MIN_WALL_LENGTH:
-		var l_surf = SurfaceClass.new(wid + ":left", wid, "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, r.position.x, r.position.y, r.position.x, r.end.y, false, true)
+		var can_climb: bool = r.size.y >= MIN_CLIMBABLE_WALL_LENGTH and wid != "screen" and not wid.begins_with("screen:")
+		var l_surf = SurfaceClass.new(wid + ":left", wid, "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, r.position.x, r.position.y, r.position.x, r.end.y, false, true, can_climb)
 		out_dict[l_surf.id] = l_surf
-		var r_surf = SurfaceClass.new(wid + ":right", wid, "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.RIGHT, r.end.x, r.position.y, r.end.x, r.end.y, false, true)
+		var r_surf = SurfaceClass.new(wid + ":right", wid, "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.RIGHT, r.end.x, r.position.y, r.end.x, r.end.y, false, true, can_climb)
 		out_dict[r_surf.id] = r_surf
 
 
@@ -228,6 +230,74 @@ func find_equivalent_edge_near(old_pos: Vector2, side: int, tolerance: float = 1
 			min_dist = d
 			best_edge = { "surface": s, "surface_id": s.id, "side": side, "x": edge_pos.x, "y": edge_pos.y, "pos": edge_pos }
 	return best_edge
+
+func get_climbable_walls_in_rect(query_rect: Rect2) -> Array:
+	var results: Array = []
+	var r_exp := query_rect.grow(16.0)
+	for s in surfaces_by_id.values():
+		if s.surface_type != SurfaceClass.SurfaceType.WALL: continue
+		if s.source_type == "SCREEN" or s.id.begins_with("screen:"): continue
+		var h: float = absf(s.y2 - s.y1)
+		if h < MIN_CLIMBABLE_WALL_LENGTH: continue
+		if not s.climbable and h < MIN_CLIMBABLE_WALL_LENGTH: continue
+		var wx: float = s.x1
+		var wy1: float = minf(s.y1, s.y2)
+		var wy2: float = maxf(s.y1, s.y2)
+		if r_exp.position.x <= wx and wx <= r_exp.end.x:
+			if not (r_exp.end.y < wy1 or r_exp.position.y > wy2):
+				results.append(s)
+	return results
+
+func find_equivalent_wall_near(old_x: float, old_y1: float, old_y2: float, orient: int, x_tol: float = 16.0, y_tol: float = 24.0) -> Dictionary:
+	var best_wall: Dictionary = {}
+	var min_dist: float = x_tol + y_tol
+	for s in surfaces_by_id.values():
+		if s.surface_type != SurfaceClass.SurfaceType.WALL: continue
+		if s.source_type == "SCREEN" or s.id.begins_with("screen:"): continue
+		if absf(s.y2 - s.y1) < MIN_CLIMBABLE_WALL_LENGTH: continue
+		if orient != -1 and s.orientation != orient and s.orientation != SurfaceClass.Orientation.TOP and s.orientation != SurfaceClass.Orientation.BOTTOM:
+			continue
+		var dx := absf(s.x1 - old_x)
+		var dy := absf(s.y1 - old_y1)
+		if dx <= x_tol and dy <= y_tol:
+			var d := dx + dy
+			if d < min_dist:
+				min_dist = d
+				best_wall = { "surface": s, "surface_id": s.id, "x": s.x1, "y1": s.y1, "y2": s.y2 }
+	return best_wall
+
+func find_platform_connected_to_wall_top(wall_surf, tolerance: float = 8.0) -> Dictionary:
+	if wall_surf == null: return {}
+	var wx: float = wall_surf.x1
+	var wy: float = minf(wall_surf.y1, wall_surf.y2)
+	var best_plat: Dictionary = {}
+	var best_score: float = 9999.0
+	for s in surfaces_by_id.values():
+		if s.surface_type != SurfaceClass.SurfaceType.PLATFORM or not s.walkable: continue
+		if s.source_type == "SCREEN" or s.id.begins_with("screen:"): continue
+		if absf(s.y1 - wy) > tolerance: continue
+		var sx_left := minf(s.x1, s.x2)
+		var sx_right := maxf(s.x1, s.x2)
+		var d_left := absf(sx_left - wx)
+		var d_right := absf(sx_right - wx)
+		var side := 0
+		var min_d := tolerance + 1.0
+		if wall_surf.orientation == SurfaceClass.Orientation.LEFT or d_left < d_right:
+			if d_left <= tolerance:
+				side = -1
+				min_d = d_left
+		elif wall_surf.orientation == SurfaceClass.Orientation.RIGHT or d_right <= d_left:
+			if d_right <= tolerance:
+				side = 1
+				min_d = d_right
+		if side != 0 and min_d <= tolerance:
+			var score := min_d
+			if s.source_id == wall_surf.source_id: score -= 100.0
+			if score < best_score:
+				best_score = score
+				var ep := Vector2(sx_left if side == -1 else sx_right, s.y1)
+				best_plat = { "platform": s, "platform_id": s.id, "edge_side": side, "edge_pos": ep }
+	return best_plat
 
 func _draw() -> void:
 

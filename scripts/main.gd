@@ -176,7 +176,9 @@ func _handle_key_event(event: InputEventKey) -> bool:
 		KEY_ESCAPE: print("[Main] 接收到 ESC 键，安全退出。"); get_tree().quit(); return true
 		KEY_TAB:
 			if is_instance_valid(cat):
-				if cat.current_state == Cat.CatState.CLIMB_UP:
+				if cat.current_state in [Cat.CatState.WALL_CLING, Cat.CatState.WALL_CLIMB]:
+					cat.release_wall("TAB_SWITCH")
+				elif cat.current_state == Cat.CatState.CLIMB_UP:
 					cat.cancel_climb("TAB_SWITCH")
 				elif cat.current_state == Cat.CatState.EDGE_HANG:
 					cat.release_edge()
@@ -194,11 +196,25 @@ func _handle_key_event(event: InputEventKey) -> bool:
 			if is_instance_valid(cat) and cat.has_method("toggle_physics_debug"):
 				cat.toggle_physics_debug()
 			return true
-		KEY_F11, KEY_K, KEY_O, KEY_U:
+		KEY_U:
+			if is_instance_valid(cat) and cat.current_state in [Cat.CatState.WALL_CLING, Cat.CatState.WALL_CLIMB]:
+				command_manager.send_command(CommandManager.CatCommand.WALL_CLIMB_UP)
+				return true
 			if ui_element_world_model and ui_element_world_model.has_method("toggle_debug_draw"):
 				ui_element_world_model.toggle_debug_draw()
 			return true
-		KEY_F12, KEY_J:
+		KEY_F11, KEY_K, KEY_O:
+			if ui_element_world_model and ui_element_world_model.has_method("toggle_debug_draw"):
+				ui_element_world_model.toggle_debug_draw()
+			return true
+		KEY_J:
+			if is_instance_valid(cat) and cat.current_state in [Cat.CatState.WALL_CLING, Cat.CatState.WALL_CLIMB]:
+				command_manager.send_command(CommandManager.CatCommand.WALL_CLIMB_DOWN)
+				return true
+			if visual_world_model and visual_world_model.has_method("toggle_debug_draw"):
+				visual_world_model.toggle_debug_draw()
+			return true
+		KEY_F12:
 			if visual_world_model and visual_world_model.has_method("toggle_debug_draw"):
 				visual_world_model.toggle_debug_draw()
 			return true
@@ -214,9 +230,13 @@ func _handle_key_event(event: InputEventKey) -> bool:
 				surface_fusion_builder.toggle_debug_diagnostics()
 			return true
 		KEY_G:
-			if is_instance_valid(cat) and (cat.current_state == Cat.CatState.EDGE_HANG or cat.current_state == Cat.CatState.CLIMB_UP):
-				command_manager.send_command(CommandManager.CatCommand.RELEASE_EDGE)
-				return true
+			if is_instance_valid(cat):
+				if cat.current_state in [Cat.CatState.WALL_CLING, Cat.CatState.WALL_CLIMB]:
+					command_manager.send_command(CommandManager.CatCommand.WALL_RELEASE)
+					return true
+				elif cat.current_state in [Cat.CatState.EDGE_HANG, Cat.CatState.CLIMB_UP]:
+					command_manager.send_command(CommandManager.CatCommand.RELEASE_EDGE)
+					return true
 			if platform_navigation_graph and platform_navigation_graph.has_method("toggle_debug_draw"):
 				platform_navigation_graph.toggle_debug_draw()
 			return true
@@ -235,6 +255,10 @@ func _handle_key_event(event: InputEventKey) -> bool:
 		KEY_F17:
 			if is_instance_valid(cat) and cat.has_method("toggle_climb_debug"):
 				cat.toggle_climb_debug()
+			return true
+		KEY_F18:
+			if is_instance_valid(cat) and cat.has_method("toggle_wall_debug"):
+				cat.toggle_wall_debug()
 			return true
 		KEY_P:
 			if autonomous_jump_planner and autonomous_jump_planner.has_method("try_plan_traversal"):

@@ -12,6 +12,7 @@ const PRIORITY_VISUAL: int = 60
 const MIN_PLATFORM_LENGTH: float = 48.0
 const MIN_TEXT_PLATFORM_LENGTH: float = 48.0
 const MIN_WALL_LENGTH: float = 48.0
+const MIN_CLIMBABLE_WALL_LENGTH: float = 48.0
 
 const MERGE_Y_TOLERANCE: float = 4.0
 const MERGE_GAP: float = 16.0
@@ -325,7 +326,11 @@ func execute_fusion() -> bool:
 			if (c.x2 - c.x1) >= MIN_PLATFORM_LENGTH: valid_cands.append(c)
 			else: stats["filtered_small"] += 1
 		else:
-			if (c.y2 - c.y1) >= MIN_WALL_LENGTH: valid_cands.append(c)
+			var wall_len: float = c.y2 - c.y1
+			if wall_len >= MIN_WALL_LENGTH:
+				if wall_len >= MIN_CLIMBABLE_WALL_LENGTH and c.source_type != "SCREEN" and not c.candidate_id.begins_with("screen:"):
+					c.climbable = true
+				valid_cands.append(c)
 			else: stats["filtered_small"] += 1
 
 	valid_cands.sort_custom(func(a, b):

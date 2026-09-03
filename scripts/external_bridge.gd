@@ -25,7 +25,12 @@ const ALLOWED_COMMANDS: Dictionary = {
 	"RELEASE_EDGE": CommandManager.CatCommand.RELEASE_EDGE,
 	"DROP_FROM_EDGE": CommandManager.CatCommand.RELEASE_EDGE,
 	"CLIMB_UP": CommandManager.CatCommand.CLIMB_UP,
-	"EDGE_CLIMB": CommandManager.CatCommand.CLIMB_UP
+	"EDGE_CLIMB": CommandManager.CatCommand.CLIMB_UP,
+	"WALL_CLIMB_UP": CommandManager.CatCommand.WALL_CLIMB_UP,
+	"WALL_UP": CommandManager.CatCommand.WALL_CLIMB_UP,
+	"WALL_CLIMB_DOWN": CommandManager.CatCommand.WALL_CLIMB_DOWN,
+	"WALL_DOWN": CommandManager.CatCommand.WALL_CLIMB_DOWN,
+	"WALL_RELEASE": CommandManager.CatCommand.WALL_RELEASE
 }
 
 var port: int = DEFAULT_PORT
@@ -289,6 +294,11 @@ func _handle_command_message(data: Dictionary) -> void:
 	if cmd_name in ["TOGGLE_DEBUG_CLIMB", "TOGGLE_DEBUG_CLIMB_UP"]:
 		if is_instance_valid(cat) and cat.has_method("toggle_climb_debug"):
 			cat.toggle_climb_debug()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
+		return
+	if cmd_name in ["TOGGLE_DEBUG_WALL", "TOGGLE_DEBUG_WALL_CLIMB"]:
+		if is_instance_valid(cat) and cat.has_method("toggle_wall_debug"):
+			cat.toggle_wall_debug()
 		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
 		return
 

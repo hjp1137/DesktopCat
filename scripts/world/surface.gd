@@ -23,6 +23,7 @@ var y1: float = 0.0
 var x2: float = 0.0
 var y2: float = 0.0
 var walkable: bool = false
+var climbable: bool = false
 var dynamic: bool = true
 var length: float = 0.0
 var source_aliases: Array[String] = []
@@ -30,10 +31,9 @@ var element_type: String = ""
 var priority: int = 0
 
 func _init(p_id: String = "", p_src_id: String = "", p_src_type: String = "WINDOW",
-
 		p_type: int = SurfaceType.PLATFORM, p_orient: int = Orientation.TOP,
 		p_x1: float = 0.0, p_y1: float = 0.0, p_x2: float = 0.0, p_y2: float = 0.0,
-		p_walkable: bool = false, p_dynamic: bool = true) -> void:
+		p_walkable: bool = false, p_dynamic: bool = true, p_climbable: bool = false) -> void:
 	id = p_id
 	source_id = p_src_id
 	source_type = p_src_type
@@ -44,6 +44,7 @@ func _init(p_id: String = "", p_src_id: String = "", p_src_type: String = "WINDO
 	y1 = min(p_y1, p_y2) if p_type == SurfaceType.WALL else p_y1
 	y2 = max(p_y1, p_y2) if p_type == SurfaceType.WALL else p_y2
 	walkable = p_walkable
+	climbable = p_climbable
 	dynamic = p_dynamic
 	length = Vector2(x2 - x1, y2 - y1).length()
 
@@ -76,6 +77,7 @@ func to_dict() -> Dictionary:
 		"orientation": Orientation.keys()[orientation],
 		"x1": x1, "y1": y1, "x2": x2, "y2": y2,
 		"walkable": walkable,
+		"climbable": climbable,
 		"dynamic": dynamic,
 		"length": length,
 		"source_aliases": source_aliases,

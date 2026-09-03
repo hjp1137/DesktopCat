@@ -15,6 +15,7 @@ var y1: float = 0.0
 var x2: float = 0.0
 var y2: float = 0.0
 var walkable: bool = false
+var climbable: bool = false
 var dynamic: bool = true
 var priority: int = 100
 var confidence: float = 1.0
@@ -36,6 +37,7 @@ func _init(p_id: String = "", p_src_type: String = "SCREEN", p_src_id: String = 
 	y1 = minf(p_y1, p_y2) if p_surf_type == SurfaceClass.SurfaceType.WALL else p_y1
 	y2 = maxf(p_y1, p_y2) if p_surf_type == SurfaceClass.SurfaceType.WALL else p_y2
 	walkable = p_walkable
+	climbable = false
 	dynamic = p_dynamic
 	priority = p_priority
 
@@ -46,7 +48,7 @@ func is_horizontal() -> bool:
 	return absf(y2 - y1) < 0.1
 
 func to_surface() -> RefCounted:
-	var s = SurfaceClass.new(candidate_id, source_id, source_type, surface_type, orientation, x1, y1, x2, y2, walkable, dynamic)
+	var s = SurfaceClass.new(candidate_id, source_id, source_type, surface_type, orientation, x1, y1, x2, y2, walkable, dynamic, climbable)
 	s.set("source_aliases", source_aliases)
 	s.set("element_type", element_type)
 	s.set("priority", priority)

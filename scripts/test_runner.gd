@@ -977,6 +977,174 @@ func _init() -> void:
 	assert(planner.stats["edge_grab_recovery_success"] >= 1, "edge_grab_recovery_success 计数增加")
 	print("[PASS] 测试 70: T18 自主规划器与 Edge Climb 闭环验证成功")
 
+	# ========== T21 Vertical Wall Attachment & Climbing 单元测试 ==========
+	var WallAttachmentClass = load("res://scripts/world/wall_attachment.gd")
+
+	# 测试 71: climbable 属性标记与屏幕假墙过滤
+	var w_long = SurfaceClass.new("win_wall_l", "w1", "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, 150.0, 200.0, 150.0, 300.0, false, true, true)
+	var w_short = SurfaceClass.new("win_wall_s", "w1", "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, 150.0, 200.0, 150.0, 220.0, false, true, false)
+	var w_scr = SurfaceClass.new("screen:left", "screen", "SCREEN", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, 0.0, 0.0, 0.0, 1080.0, false, true, false)
+	surf_model.surfaces_by_id["win_wall_l"] = w_long
+	surf_model.surfaces_by_id["win_wall_s"] = w_short
+	surf_model.surfaces_by_id["screen:left"] = w_scr
+	var q_walls = surf_model.get_climbable_walls_in_rect(Rect2(100.0, 150.0, 100.0, 200.0))
+	assert(q_walls.has(w_long) and not q_walls.has(w_short) and not q_walls.has(w_scr), "正确筛选长墙并过滤短墙与屏幕墙")
+	surf_model.surfaces_by_id.erase("win_wall_s")
+	surf_model.surfaces_by_id.erase("screen:left")
+	print("[PASS] 测试 71: climbable 属性标记与屏幕假墙过滤验证成功")
+
+	# 测试 72: WallAttachment 数据结构与属性序列化
+	var wa = WallAttachmentClass.new("win_wall_l", 150.0, 200.0, 300.0, SurfaceClass.Orientation.LEFT, -1, 240.0, 1)
+	assert(wa.wall_surface_id == "win_wall_l" and wa.attach_side == -1 and wa.wall_x == 150.0, "字段赋值正确")
+	var wa_dict = wa.to_dict()
+	assert(wa_dict.attach_side == "LEFT" and wa_dict.anchor_y == 240.0, "序列化正确")
+	print("[PASS] 测试 72: WallAttachment 数据结构与属性序列化验证成功")
+
+	# 测试 73: 下落 Swept 抓墙 (左侧外侧接近、朝向向右、附着坐标计算正确)
+	cat.current_mode = Cat.ControlMode.COMMAND
+	cat.position = Vector2(138.0, 230.0)
+	cat.direction = 1.0
+	cat.vertical_velocity = 200.0
+	cat.horizontal_throw_speed = 0.0
+	cat.is_grounded = false
+	cat.change_state(Cat.CatState.FALL)
+	cat.wall_cooldown = 0.0
+	cat.update_state(0.016)
+	assert(cat.current_state == Cat.CatState.WALL_CLING, "下落接近左墙外侧应进入 WALL_CLING")
+	assert(cat.direction == 1.0, "挂在左侧时小猫应面向右(面向墙面)")
+	assert(absf(cat.position.x - (150.0 - cat.wall_cling_offset_x)) < 0.1, "小猫 X 坐标精确贴靠左墙外侧")
+	assert(cat.is_grounded == false and cat.vertical_velocity == 0.0, "挂墙期间暂停重力与下落速度")
+	print("[PASS] 测试 73: 下落 Swept 抓墙 (左侧外侧接近与附着坐标) 验证成功")
+
+	# 测试 74: 右侧外侧抓墙与朝向对称自适应
+	var w_right = SurfaceClass.new("win_wall_r", "w1", "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.RIGHT, 250.0, 200.0, 250.0, 300.0, false, true, true)
+	surf_model.surfaces_by_id["win_wall_r"] = w_right
+	cat.position = Vector2(262.0, 230.0)
+	cat.direction = -1.0
+	cat.vertical_velocity = 200.0
+	cat.is_grounded = false
+	cat.change_state(Cat.CatState.FALL)
+	cat.wall_cooldown = 0.0
+	cat.update_state(0.016)
+	assert(cat.current_state == Cat.CatState.WALL_CLING, "下落接近右墙外侧应进入 WALL_CLING")
+	assert(cat.direction == -1.0, "挂在右侧时小猫应面向左(面向墙面)")
+	assert(absf(cat.position.x - (250.0 + cat.wall_cling_offset_x)) < 0.1, "小猫 X 坐标对称贴靠右墙外侧")
+	print("[PASS] 测试 74: 右侧外侧抓墙与朝向对称自适应验证成功")
+
+	# 测试 75: 超速下落与过远拒绝抓墙 (零磁吸)
+	surf_model.surfaces_by_id.erase("Top")
+	surf_model.surfaces_by_id.erase("Mid")
+	surf_model.surfaces_by_id.erase("plat_normal")
+	cat.position = Vector2(138.0, 230.0)
+	cat.vertical_velocity = 800.0 # 超出 max_wall_attach_vertical_speed(500.0)
+	cat.is_grounded = false
+	cat.change_state(Cat.CatState.FALL)
+	cat.wall_cooldown = 0.0
+	cat.update_state(0.016)
+	assert(cat.current_state == Cat.CatState.FALL, "超速下落不应抓墙")
+	cat.vertical_velocity = 200.0
+	cat.position = Vector2(90.0, 230.0) # 距离墙面 60px，超出 14px 容差
+	cat.update_state(0.016)
+	assert(cat.current_state == Cat.CatState.FALL, "距离过远绝不磁吸抓墙")
+	print("[PASS] 测试 75: 超速下落与过远拒绝抓墙 (零磁吸) 验证成功")
+
+	# 测试 76: WALL_CLIMB 连续向上/向下爬行、STOP 转 Cling 与中途反向
+	cat.position = Vector2(136.0, 260.0)
+	cat.current_wall_attachment = WallAttachmentClass.new("win_wall_l", 150.0, 200.0, 300.0, SurfaceClass.Orientation.LEFT, -1, 242.0, 1)
+	cat.direction = 1.0
+	cat.change_state(Cat.CatState.WALL_CLING)
+	cmd_mgr.send_command(CommandManager.CatCommand.WALL_CLIMB_UP)
+	assert(cat.current_state == Cat.CatState.WALL_CLIMB and cat.current_wall_climb_dir == Cat.WallClimbDirection.UP, "接收 WALL_CLIMB_UP 指令进入爬行")
+	var pre_y := cat.position.y
+	cat.update_state(0.2) # 爬行 0.2s: -60.0 * 0.2 = -12.0
+	assert(cat.position.y < pre_y - 10.0, "向上爬行 Y 坐标平滑上升")
+	# 中途无缝反向向下
+	cmd_mgr.send_command(CommandManager.CatCommand.WALL_CLIMB_DOWN)
+	assert(cat.current_wall_climb_dir == Cat.WallClimbDirection.DOWN, "中途换向向下")
+	pre_y = cat.position.y
+	cat.update_state(0.1)
+	assert(cat.position.y > pre_y + 4.0, "向下爬行 Y 坐标下降")
+	# 停止爬行停留在当前位置
+	cmd_mgr.send_command(CommandManager.CatCommand.STOP)
+	assert(cat.current_state == Cat.CatState.WALL_CLING and cat.current_wall_climb_dir == Cat.WallClimbDirection.NONE, "STOP 后转为 WALL_CLING")
+	print("[PASS] 测试 76: WALL_CLIMB 连续向上/向下爬行、STOP 转 Cling 与中途反向验证成功")
+
+	# 测试 77: 爬到 Wall Top 自动过渡为 EDGE_HANG 并触发 T20 CLIMB_UP 登顶
+	var plat_top = SurfaceClass.new("win_top", "w1", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, 150.0, 200.0, 250.0, 200.0, true, true)
+	surf_model.surfaces_by_id["win_top"] = plat_top
+	cat.position = Vector2(136.0, 212.0)
+	cat.current_wall_attachment = WallAttachmentClass.new("win_wall_l", 150.0, 200.0, 300.0, SurfaceClass.Orientation.LEFT, -1, 204.0, 1)
+	cat.direction = 1.0
+	cat.change_state(Cat.CatState.WALL_CLING)
+	cmd_mgr.send_command(CommandManager.CatCommand.WALL_CLIMB_UP)
+	cat.update_state(0.1) # 向上到达顶端 200.0 + tolerance
+	assert(cat.current_state == Cat.CatState.EDGE_HANG, "爬到墙顶自动平滑过渡为 EDGE_HANG")
+	assert(cat.grabbed_surface_id == "win_top" and cat.grabbed_edge.edge_side == -1, "抓取对应 Platform 左端点")
+	cmd_mgr.send_command(CommandManager.CatCommand.CLIMB_UP)
+	cat.update_state(cat.climb_pull_up_duration + 0.02)
+	cat.update_state(cat.climb_shift_in_duration + 0.02)
+	assert(cat.current_state == Cat.CatState.IDLE and cat.is_grounded == true, "从墙顶翻越并登顶站立在平台上")
+	assert(cat.current_surface_id == "win_top", "站在目标平台上")
+	print("[PASS] 测试 77: 爬到 Wall Top 自动过渡为 EDGE_HANG 并登顶验证成功")
+
+	# 测试 78: 爬墙中表面平移跟随、超大位移 (>150px) 脱落与等价 Rebind
+	cat.position = Vector2(136.0, 250.0)
+	cat.current_wall_attachment = WallAttachmentClass.new("win_wall_l", 150.0, 200.0, 300.0, SurfaceClass.Orientation.LEFT, -1, 232.0, 1)
+	cat.direction = 1.0
+	cat.change_state(Cat.CatState.WALL_CLING)
+	var prev_cx := cat.position.x
+	# 模拟窗口平移 10px
+	w_long.x1 += 10.0; w_long.x2 += 10.0
+	cat.update_state(0.016)
+	assert(absf(cat.position.x - (prev_cx + 10.0)) < 1.0, "爬墙时坐标应跟随墙面平移")
+	# 模拟表面被替换为几何相近新表面 (Rebind)
+	surf_model.surfaces_by_id.erase("win_wall_l")
+	var w_re = SurfaceClass.new("win_wall_re", "w1", "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, 161.0, 200.0, 161.0, 300.0, false, true, true)
+	surf_model.surfaces_by_id["win_wall_re"] = w_re
+	cat.update_state(0.016)
+	assert(cat.current_state == Cat.CatState.WALL_CLING and cat.current_wall_attachment.wall_surface_id == "win_wall_re", "等价新表面应自动 Rebind")
+	# 模拟突变 200px 超过容差脱落
+	w_re.x1 += 200.0; w_re.x2 += 200.0
+	cat.update_state(0.016)
+	assert(cat.current_state == Cat.CatState.FALL, "墙面大幅瞬移超限时应安全脱落")
+	print("[PASS] 测试 78: 爬墙中表面平移跟随、超大位移脱落与等价 Rebind 验证成功")
+
+	# 测试 79: 用户 DRAG 拖拽与 G (WALL_RELEASE) 瞬间脱落进入 FALL
+	surf_model.surfaces_by_id["win_wall_l"] = w_long
+	w_long.x1 = 150.0; w_long.x2 = 150.0
+	cat.position = Vector2(136.0, 250.0)
+	cat.current_wall_attachment = WallAttachmentClass.new("win_wall_l", 150.0, 200.0, 300.0, SurfaceClass.Orientation.LEFT, -1, 232.0, 1)
+	cat.direction = 1.0
+	cat.change_state(Cat.CatState.WALL_CLING)
+	cmd_mgr.send_command(CommandManager.CatCommand.DRAG_START, { "mouse_pos": cat.position })
+	assert(cat.current_state == Cat.CatState.DRAG, "DRAG 拖拽应瞬间中断附着转入 DRAG")
+	assert(cat.current_wall_attachment == null, "附着数据已清空")
+	cmd_mgr.send_command(CommandManager.CatCommand.DRAG_END, { "throw_velocity": Vector2.ZERO })
+
+	cat.position = Vector2(136.0, 250.0)
+	cat.current_wall_attachment = WallAttachmentClass.new("win_wall_l", 150.0, 200.0, 300.0, SurfaceClass.Orientation.LEFT, -1, 232.0, 1)
+	cat.change_state(Cat.CatState.WALL_CLING)
+	cmd_mgr.send_command(CommandManager.CatCommand.WALL_RELEASE)
+	assert(cat.current_state == Cat.CatState.FALL, "WALL_RELEASE 指令应立即脱手进入 FALL")
+	assert(cat.current_wall_attachment == null, "附着数据已清空")
+	print("[PASS] 测试 79: 用户 DRAG 拖拽与 G 释放指令瞬间脱落验证成功")
+
+	# 测试 80: AUTO 模式停顿 0.5s 自动往上爬与长墙超时脱落
+	cat.current_mode = Cat.ControlMode.AUTO
+	cat.position = Vector2(136.0, 250.0)
+	cat.current_wall_attachment = WallAttachmentClass.new("win_wall_l", 150.0, 100.0, 800.0, SurfaceClass.Orientation.LEFT, -1, 232.0, 1)
+	cat.direction = 1.0
+	cat.auto_wall_pause_timer = 0.5
+	cat.auto_wall_climb_timer = 0.0
+	cat.change_state(Cat.CatState.WALL_CLING)
+	cat.update_state(0.2)
+	assert(cat.current_state == Cat.CatState.WALL_CLING, "停顿时间内保持附着静止")
+	cat.update_state(0.4) # 累计超过 0.5s
+	assert(cat.current_state == Cat.CatState.WALL_CLIMB and cat.current_wall_climb_dir == Cat.WallClimbDirection.UP, "停顿结束后自动向上爬")
+	cat.update_state(cat.auto_max_wall_climb_duration + 0.1)
+	assert(cat.current_state == Cat.CatState.FALL, "长墙爬行超时后安全自动脱落")
+	print("[PASS] 测试 80: AUTO 模式停顿自动爬行与长墙超时脱落验证成功")
+
 	fusion_builder.queue_free()
 	vis_model.queue_free()
 	ui_model.queue_free()
@@ -985,7 +1153,7 @@ func _init() -> void:
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
 	planner.queue_free()
-	print("========== T20 Edge Climb-Up 单元测试全部通过 (共70项测试) ==========")
+	print("========== T21 Vertical Wall Attachment & Climbing 单元测试全部通过 (共80项测试) ==========")
 	quit(0)
 
 

@@ -19,7 +19,10 @@ enum CatCommand {
 	MOVE_TO_POSITION,
 	CLEAR_TARGET,
 	RELEASE_EDGE,
-	CLIMB_UP
+	CLIMB_UP,
+	WALL_CLIMB_UP,
+	WALL_CLIMB_DOWN,
+	WALL_RELEASE
 }
 
 signal command_dispatched(cmd: CatCommand, payload: Dictionary)

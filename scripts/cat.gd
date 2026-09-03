@@ -2,14 +2,16 @@ class_name Cat
 extends Node2D
 
 enum ControlMode { AUTO, COMMAND }
-enum CatState { IDLE, WALK, RUN, SIT, SLEEP, JUMP, FALL, DRAG, EDGE_HANG, CLIMB_UP }
+enum CatState { IDLE, WALK, RUN, SIT, SLEEP, JUMP, FALL, DRAG, EDGE_HANG, CLIMB_UP, WALL_CLING, WALL_CLIMB }
 enum ClimbPhase { NONE, PULL_UP, SHIFT_IN, SETTLE }
+enum WallClimbDirection { NONE, UP, DOWN }
 
 signal climb_completed(surface_id: String)
 signal climb_failed(reason: String)
 
 const GrabbedEdgeClass = preload("res://scripts/world/grabbed_edge.gd")
 const ClimbTargetClass = preload("res://scripts/world/climb_target.gd")
+const WallAttachmentClass = preload("res://scripts/world/wall_attachment.gd")
 
 @export var walk_speed: float = 120.0
 @export var run_speed: float = 220.0
@@ -74,6 +76,30 @@ var edge_grab_stats: Dictionary = {
 	"released": 0, "surface_lost": 0, "rebound_edge": 0
 }
 
+@export var min_climbable_wall_length: float = 48.0
+@export var wall_attach_x_tolerance: float = 14.0
+@export var max_wall_attach_vertical_speed: float = 500.0
+@export var max_wall_attach_horizontal_speed: float = 280.0
+@export var wall_cling_offset_x: float = 14.0
+@export var wall_climb_speed: float = 60.0
+@export var wall_top_edge_tolerance: float = 8.0
+@export var max_wall_attach_delta: float = 150.0
+@export var auto_wall_reaction_delay: float = 0.5
+@export var auto_max_wall_climb_duration: float = 4.0
+@export var wall_cooldown_time: float = 1.0
+
+var current_wall_attachment: RefCounted = null
+var current_wall_climb_dir: WallClimbDirection = WallClimbDirection.NONE
+var auto_wall_pause_timer: float = 0.0
+var auto_wall_climb_timer: float = 0.0
+var wall_cooldown: float = 0.0
+var wall_debug_enabled: bool = false
+var _prev_wall_contact: Vector2 = Vector2.ZERO
+var wall_stats: Dictionary = {
+	"wall_attach_attempts": 0, "wall_attach_success": 0, "wall_climb_started": 0,
+	"wall_top_reached": 0, "wall_released": 0, "wall_surface_lost": 0, "wall_rebind_success": 0
+}
+
 var current_surface_id: String = "screen:ground"
 var current_surface: RefCounted = null
 var surface_world_model: Node2D = null
@@ -115,6 +141,16 @@ func toggle_climb_debug() -> bool:
 	print("[Climb] Debug View: %s" % ("ON" if climb_debug_enabled else "OFF"))
 	queue_redraw()
 	return climb_debug_enabled
+
+func toggle_wall_debug() -> bool:
+	wall_debug_enabled = not wall_debug_enabled
+	print("[Wall] Debug View: %s" % ("ON" if wall_debug_enabled else "OFF"))
+	queue_redraw()
+	return wall_debug_enabled
+
+func get_wall_contact_point() -> Vector2:
+	var side_x: float = wall_cling_offset_x if direction >= 0.0 else -wall_cling_offset_x
+	return position + Vector2(side_x, -18.0)
 
 func get_current_surface_id() -> String:
 	return current_surface_id
@@ -171,11 +207,29 @@ func enter_state(state: CatState) -> void:
 				else:
 					sprite.play("idle")
 				sprite.flip_h = (direction < 0.0)
+		CatState.WALL_CLING:
+			if sprite:
+				if sprite.sprite_frames and sprite.sprite_frames.has_animation("wall_cling"):
+					sprite.play("wall_cling")
+				elif sprite.sprite_frames and sprite.sprite_frames.has_animation("edge_hang"):
+					sprite.play("edge_hang")
+				else:
+					sprite.play("idle")
+				sprite.flip_h = (direction < 0.0)
+		CatState.WALL_CLIMB:
+			if sprite:
+				if sprite.sprite_frames and sprite.sprite_frames.has_animation("wall_climb"):
+					sprite.play("wall_climb")
+				else:
+					sprite.play("walk")
+				sprite.flip_h = (direction < 0.0)
 	print("[Cat] [%s] 进入状态: %s, 朝向: %s, Y=%.1f" % ["AUTO" if current_mode == ControlMode.AUTO else "COMMAND", CatState.keys()[state], "左" if direction < 0.0 else "右", position.y])
 
 func update_state(delta: float) -> void:
 	if climb_cooldown > 0.0:
 		climb_cooldown -= delta
+	if wall_cooldown > 0.0:
+		wall_cooldown -= delta
 	sleep_cooldown = maxf(0.0, sleep_cooldown - delta); run_cooldown = maxf(0.0, run_cooldown - delta)
 	if current_state == CatState.DRAG: return
 	if current_state == CatState.CLIMB_UP:
@@ -183,6 +237,9 @@ func update_state(delta: float) -> void:
 		return
 	if current_state == CatState.EDGE_HANG:
 		_update_edge_hang(delta)
+		return
+	if current_state == CatState.WALL_CLING or current_state == CatState.WALL_CLIMB:
+		_update_wall_behavior(delta)
 		return
 	if is_grounded:
 		_check_ground_support()
@@ -192,6 +249,7 @@ func update_state(delta: float) -> void:
 		var prev_y: float = get_foot_position().y
 		var prev_grab_l := get_left_grab_point()
 		var prev_grab_r := get_right_grab_point()
+		var prev_pos := position
 		vertical_velocity += gravity * delta
 		var next_y: float = prev_y + vertical_velocity * delta
 		position.y = next_y - foot_offset.y
@@ -213,6 +271,8 @@ func update_state(delta: float) -> void:
 					position.y = ground_y; vertical_velocity = 0.0; horizontal_throw_speed = 0.0; is_grounded = true; current_surface_id = "screen:ground"; _on_land()
 			elif current_state == CatState.FALL:
 				_check_edge_grab(prev_grab_l, get_left_grab_point(), prev_grab_r, get_right_grab_point())
+				if current_state == CatState.FALL and wall_cooldown <= 0.0:
+					_check_wall_attach(prev_pos, position)
 		_prev_foot_y = get_foot_position().y
 		_prev_grab_left = get_left_grab_point()
 		_prev_grab_right = get_right_grab_point()
@@ -638,7 +698,190 @@ func complete_climb() -> void:
 		command_ground_state = CatState.IDLE
 	change_state(CatState.IDLE)
 
+func _check_wall_attach(prev_pos: Vector2, curr_pos: Vector2) -> void:
+	if not is_instance_valid(surface_world_model): return
+	if not surface_world_model.has_method("get_climbable_walls_in_rect"): return
+	if absf(vertical_velocity) > max_wall_attach_vertical_speed: return
+	if absf(horizontal_throw_speed) > max_wall_attach_horizontal_speed: return
+	if vertical_velocity < 0.0: return
+
+	var q_min_x := minf(prev_pos.x, curr_pos.x) - 32.0
+	var q_max_x := maxf(prev_pos.x, curr_pos.x) + 32.0
+	var q_min_y := minf(prev_pos.y, curr_pos.y) - 48.0
+	var q_max_y := maxf(prev_pos.y, curr_pos.y) + 48.0
+	var query_rect := Rect2(q_min_x, q_min_y, q_max_x - q_min_x, q_max_y - q_min_y)
+	var candidate_walls: Array = surface_world_model.get_climbable_walls_in_rect(query_rect)
+	if candidate_walls.is_empty(): return
+
+	wall_stats["wall_attach_attempts"] = int(wall_stats.get("wall_attach_attempts", 0)) + 1
+	var best_wall = null
+	var best_side: int = 0
+	var best_anchor_y: float = 0.0
+	var min_dist: float = 9999.0
+
+	for s in candidate_walls:
+		var wx: float = s.x1
+		var wy1: float = minf(s.y1, s.y2)
+		var wy2: float = maxf(s.y1, s.y2)
+		var orient: int = s.orientation
+
+		var side := 0
+		if orient == 2: # Orientation.LEFT
+			if curr_pos.x <= wx + 6.0: side = -1
+		elif orient == 3: # Orientation.RIGHT
+			if curr_pos.x >= wx - 6.0: side = 1
+		else:
+			side = -1 if curr_pos.x <= wx else 1
+		if side == 0: continue
+
+		var curr_claw_x: float = curr_pos.x + (wall_cling_offset_x if side == -1 else -wall_cling_offset_x)
+		var prev_claw_x: float = prev_pos.x + (wall_cling_offset_x if side == -1 else -wall_cling_offset_x)
+		var claw_y: float = curr_pos.y - 18.0
+
+		if claw_y < wy1 + 4.0 or claw_y > wy2 - 8.0:
+			continue
+
+		var dx := absf(curr_claw_x - wx)
+		var swept_crossed: bool = (prev_claw_x - wx) * (curr_claw_x - wx) <= 0.0
+		if dx <= wall_attach_x_tolerance or swept_crossed:
+			var d := dx
+			if d < min_dist:
+				min_dist = d
+				best_wall = s
+				best_side = side
+				best_anchor_y = claw_y
+
+	if best_wall != null:
+		_attach_wall(best_wall, best_side, best_anchor_y)
+
+func _attach_wall(s, side: int, anchor_y: float) -> void:
+	wall_stats["wall_attach_success"] = int(wall_stats.get("wall_attach_success", 0)) + 1
+	var rev: int = surface_world_model.surface_revision if is_instance_valid(surface_world_model) and "surface_revision" in surface_world_model else 0
+	current_wall_attachment = WallAttachmentClass.new(s.id, s.x1, s.y1, s.y2, s.orientation, side, anchor_y, rev)
+	direction = 1.0 if side == -1 else -1.0
+	if _get_animated_sprite():
+		_get_animated_sprite().flip_h = (direction < 0.0)
+
+	position.x = s.x1 + (-wall_cling_offset_x if side == -1 else wall_cling_offset_x)
+	position.y = anchor_y + 18.0
+
+	vertical_velocity = 0.0
+	horizontal_throw_speed = 0.0
+	is_grounded = false
+	current_surface_id = ""
+	current_surface = null
+	grabbed_edge = null
+	grabbed_surface_id = ""
+
+	current_wall_climb_dir = WallClimbDirection.NONE
+	auto_wall_pause_timer = auto_wall_reaction_delay
+	auto_wall_climb_timer = 0.0
+
+	change_state(CatState.WALL_CLING)
+	print("[Wall] Attached surface=%s side=%s Y=%.1f" % [s.id, "LEFT" if side == -1 else "RIGHT", position.y])
+
+func release_wall(reason: String = "MANUAL") -> void:
+	if current_state != CatState.WALL_CLING and current_state != CatState.WALL_CLIMB: return
+	wall_stats["wall_released"] = int(wall_stats.get("wall_released", 0)) + 1
+	print("[Wall] Released: %s -> FALL" % reason)
+	current_wall_attachment = null
+	current_wall_climb_dir = WallClimbDirection.NONE
+	wall_cooldown = wall_cooldown_time
+	is_grounded = false
+	current_surface_id = ""
+	current_surface = null
+	vertical_velocity = 10.0
+	horizontal_throw_speed = 0.0
+	var sg = surface_world_model.get_surface_by_id("screen:ground") if is_instance_valid(surface_world_model) else null
+	ground_y = sg.y1 if sg != null else (_get_viewport_size().y - 48.0)
+	change_state(CatState.FALL)
+
+func _update_wall_behavior(delta: float) -> void:
+	vertical_velocity = 0.0
+	horizontal_throw_speed = 0.0
+	is_grounded = false
+	if current_wall_attachment == null:
+		release_wall("NO_ATTACHMENT")
+		return
+
+	if not is_instance_valid(surface_world_model): return
+	var s = surface_world_model.get_surface_by_id(current_wall_attachment.wall_surface_id)
+	if s == null:
+		var re_wall = surface_world_model.find_equivalent_wall_near(
+			current_wall_attachment.wall_x, current_wall_attachment.wall_y1, current_wall_attachment.wall_y2,
+			current_wall_attachment.wall_orientation, 16.0, 24.0
+		)
+		if not re_wall.is_empty():
+			wall_stats["wall_rebind_success"] = int(wall_stats.get("wall_rebind_success", 0)) + 1
+			current_wall_attachment.wall_surface_id = str(re_wall.surface_id)
+			current_wall_attachment.update_geometry(float(re_wall.x), float(re_wall.y1), float(re_wall.y2))
+			s = re_wall.surface
+			print("[Wall] Rebind successful: -> %s" % current_wall_attachment.wall_surface_id)
+		else:
+			wall_stats["wall_surface_lost"] = int(wall_stats.get("wall_surface_lost", 0)) + 1
+			release_wall("SURFACE_LOST")
+			return
+
+	var dx: float = absf(s.x1 - current_wall_attachment.wall_x)
+	var dy: float = s.y1 - current_wall_attachment.wall_y1
+	if dx > max_wall_attach_delta or absf(dy) > max_wall_attach_delta:
+		release_wall("WALL_MOVED_TOO_FAR")
+		return
+	elif dx != 0.0 or dy != 0.0:
+		current_wall_attachment.anchor_y += dy
+		current_wall_attachment.update_geometry(s.x1, s.y1, s.y2)
+
+	if current_mode == ControlMode.AUTO:
+		if current_state == CatState.WALL_CLING:
+			auto_wall_pause_timer -= delta
+			if auto_wall_pause_timer <= 0.0:
+				current_wall_climb_dir = WallClimbDirection.UP
+				change_state(CatState.WALL_CLIMB)
+				print("[Wall] AUTO climb UP started")
+		elif current_state == CatState.WALL_CLIMB:
+			auto_wall_climb_timer += delta
+			if auto_wall_climb_timer > auto_max_wall_climb_duration:
+				print("[Wall] AUTO climb duration exceeded (%.1fs) -> release" % auto_max_wall_climb_duration)
+				release_wall("AUTO_TIMEOUT")
+				return
+
+	if current_state == CatState.WALL_CLIMB:
+		var move_d := 0.0
+		if current_wall_climb_dir == WallClimbDirection.UP: move_d = -wall_climb_speed * delta
+		elif current_wall_climb_dir == WallClimbDirection.DOWN: move_d = wall_climb_speed * delta
+		current_wall_attachment.anchor_y += move_d
+
+		if current_wall_climb_dir == WallClimbDirection.UP:
+			if current_wall_attachment.anchor_y <= current_wall_attachment.wall_y1 + wall_top_edge_tolerance:
+				wall_stats["wall_top_reached"] = int(wall_stats.get("wall_top_reached", 0)) + 1
+				var plat_info = surface_world_model.find_platform_connected_to_wall_top(s, 12.0)
+				if not plat_info.is_empty():
+					var p_surf = plat_info.platform
+					var p_side: int = int(plat_info.edge_side)
+					var p_pos: Vector2 = plat_info.edge_pos
+					print("[Wall] Reached top of %s -> transition to EDGE_HANG on %s" % [s.id, p_surf.id])
+					current_wall_attachment = null
+					current_wall_climb_dir = WallClimbDirection.NONE
+					_grab_edge({ "surface_id": p_surf.id, "side": p_side, "x": p_pos.x, "y": p_pos.y })
+					if current_mode == ControlMode.AUTO: auto_climb_pause_timer = 0.0
+					return
+				else:
+					current_wall_attachment.anchor_y = current_wall_attachment.wall_y1 + 4.0
+					current_wall_climb_dir = WallClimbDirection.NONE
+					change_state(CatState.WALL_CLING)
+		elif current_wall_climb_dir == WallClimbDirection.DOWN:
+			if current_wall_attachment.anchor_y >= current_wall_attachment.wall_y2 - 8.0:
+				current_wall_attachment.anchor_y = current_wall_attachment.wall_y2 - 8.0
+				current_wall_climb_dir = WallClimbDirection.NONE
+				change_state(CatState.WALL_CLING)
+
+	position.x = current_wall_attachment.wall_x + (-wall_cling_offset_x if current_wall_attachment.attach_side == -1 else wall_cling_offset_x)
+	position.y = current_wall_attachment.anchor_y + 18.0
+
 func on_surface_world_updated(_rev: int = 0) -> void:
+	if current_state == CatState.WALL_CLING or current_state == CatState.WALL_CLIMB:
+		_update_wall_behavior(0.0)
+		return
 	if current_state == CatState.CLIMB_UP:
 		_update_climb(0.0)
 		return
@@ -679,11 +922,31 @@ func handle_command(command: int, payload: Dictionary = {}) -> void:
 			cancel_climb("DRAG_INTERRUPTED")
 		elif command in [0, 1, 2, 4, 8, 9, 10, 11, 12, 14, 17]:
 			return
+	if current_state == CatState.WALL_CLING or current_state == CatState.WALL_CLIMB:
+		if command == 20 or command == 16: # WALL_RELEASE 或 RELEASE_EDGE
+			release_wall("USER_RELEASED")
+			return
+		elif command == 5: # DRAG_START
+			release_wall("DRAG_INTERRUPTED")
+		elif command == 18: # WALL_CLIMB_UP
+			current_wall_climb_dir = WallClimbDirection.UP
+			change_state(CatState.WALL_CLIMB)
+			return
+		elif command == 19: # WALL_CLIMB_DOWN
+			current_wall_climb_dir = WallClimbDirection.DOWN
+			change_state(CatState.WALL_CLIMB)
+			return
+		elif command == 0: # STOP
+			current_wall_climb_dir = WallClimbDirection.NONE
+			change_state(CatState.WALL_CLING)
+			return
+		elif command in [1, 2, 4, 8, 9, 10, 11, 12, 14, 17]:
+			return
 	if current_state == CatState.EDGE_HANG:
 		if command == 17: # CLIMB_UP
 			start_climb()
 			return
-		elif command == 16: # RELEASE_EDGE
+		elif command == 16 or command == 20: # RELEASE_EDGE 或 WALL_RELEASE
 			release_edge()
 			return
 		elif command == 5: # DRAG_START
@@ -763,7 +1026,7 @@ func _move_and_bounce(delta: float, cur_speed: float) -> void:
 
 func _on_clicked() -> void:
 	print("Cat clicked!")
-	if current_state != CatState.EDGE_HANG and current_state != CatState.CLIMB_UP:
+	if current_state not in [CatState.EDGE_HANG, CatState.CLIMB_UP, CatState.WALL_CLING, CatState.WALL_CLIMB]:
 		var sprite := _get_animated_sprite()
 		if sprite: var tw := create_tween(); tw.tween_property(sprite, "position:y", -16.0, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT); tw.tween_property(sprite, "position:y", 0.0, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	var main_p := get_parent()
@@ -825,4 +1088,25 @@ func _draw() -> void:
 		var phase_name: String = ["NONE", "PULL_UP", "SHIFT_IN", "SETTLE"][current_climb_phase]
 		var cl_info := "[F17 Climb] Phase: %s | Target: %s | Success: %d" % [phase_name, grabbed_surface_id if grabbed_surface_id != "" else "NONE", int(climb_stats["climb_success"])]
 		draw_string(ThemeDB.fallback_font, Vector2(-60.0, -66.0), cl_info, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.3, 1.0, 0.5, 0.95))
+
+	if wall_debug_enabled:
+		if is_instance_valid(surface_world_model) and surface_world_model.has_method("get_climbable_walls_in_rect"):
+			var q_rect := Rect2(position.x - 300.0, position.y - 300.0, 600.0, 600.0)
+			var walls: Array = surface_world_model.get_climbable_walls_in_rect(q_rect)
+			for w in walls:
+				var p1 := to_local(Vector2(w.x1, w.y1))
+				var p2 := to_local(Vector2(w.x1, w.y2))
+				draw_line(p1, p2, Color(0.9, 0.8, 0.1, 0.8), 2.5)
+				draw_string(ThemeDB.fallback_font, p1 + Vector2(4.0, 4.0), "T", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.9, 0.9, 0.1, 0.9))
+				draw_string(ThemeDB.fallback_font, p2 + Vector2(4.0, -4.0), "B", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.9, 0.9, 0.1, 0.9))
+		if current_wall_attachment != null:
+			var wp1 := to_local(Vector2(current_wall_attachment.wall_x, current_wall_attachment.wall_y1))
+			var wp2 := to_local(Vector2(current_wall_attachment.wall_x, current_wall_attachment.wall_y2))
+			draw_line(wp1, wp2, Color(1.0, 0.1, 0.6, 0.95), 4.0)
+			var claw_pt := to_local(get_wall_contact_point())
+			draw_circle(claw_pt, 5.0, Color(1.0, 0.5, 0.0, 0.95))
+		var dir_str: String = ["NONE", "UP", "DOWN"][current_wall_climb_dir]
+		var wid_str: String = current_wall_attachment.wall_surface_id if current_wall_attachment != null else "NONE"
+		var w_info := "[F18 Wall] State: %s | Wall: %s | Dir: %s | Attach: %d" % [CatState.keys()[current_state], wid_str, dir_str, int(wall_stats["wall_attach_success"])]
+		draw_string(ThemeDB.fallback_font, Vector2(-60.0, -80.0), w_info, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.8, 0.2, 0.95))
 

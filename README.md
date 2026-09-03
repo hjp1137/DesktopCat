@@ -62,6 +62,13 @@
   - T18 规划器协同：目标抓边挂起等待翻越，登顶后结算为 SUCCESS 并统计 `edge_grab_recovery_success`；
   - 支持 `F17` 调试视图，实时绘制攀爬两段轨迹、Clearance 框与相位；
   - 明确：T20 仅实现 Edge → Platform Top 边缘登顶，尚未实现竖直连续墙面爬行（Wall Climb）。
+- **T21**：**垂直墙面附着与双向攀爬系统 (Vertical Wall Attachment & Climbing)**：
+  - `Surface` 与 `SurfaceCandidate` 新增 `climbable: bool` 属性，统一标记垂直长度 $\ge 48\text{px}$ 的非屏幕 WALL 为可爬墙面；
+  - 下落过程严格遵循优先级：`Landing > Edge Grab > Wall Attach > Fall`，零吸附，外侧单向物理贴靠；
+  - 新增状态 `WALL_CLING` 与 `WALL_CLIMB`，支持向上/向下匀速爬行，中途无缝换向与 STOP 停止；
+  - 到达墙顶时自动寻找连接平台平滑转入 `EDGE_HANG` 并衔接登顶翻越（`CLIMB_UP`）；
+  - 支持动态表面跟随、超大位移（$>150\text{px}$）脱落与等价 Rebind；DRAG 拖拽及 G 键释放最高优先级打断；
+  - 支持 `F18` 调试视图与外部 TCP 协议指令分发。
 
 ## 运行方式与快捷键
 
@@ -71,16 +78,19 @@
   - `F8` / `-` / `V`：切换【窗口矩形】调试线框
   - `F9` / `=` / `B`：切换【Surface 物理表面】调试线框（含融合后的全部表面）
   - `F10` / `N` / `M`：切换【Cat 物理接触点与站立表面】高亮
-  - `F11` / `K` / `O` / `U`：切换【UI Automation 控件几何】调试线框
-  - `F12` / `J`：切换【Visual Geometry 视觉几何】调试线框
+  - `F11` / `K` / `O`：切换【UI Automation 控件几何】调试线框
+  - `F12`：切换【Visual Geometry 视觉几何】调试线框
+  - `U`：爬墙状态下【WALL_CLIMB_UP】向上爬行；非爬墙状态切换 UI 调试线框
+  - `J`：爬墙状态下【WALL_CLIMB_DOWN】向下爬行；非爬墙状态切换视觉调试线框
   - `F13` / `Y`：切换【Unified Surface Fusion 融合诊断】HUD 视图
   - `H`：小猫悬挂在平台边缘时触发【CLIMB_UP】攀爬登顶；非悬挂状态切换融合诊断 HUD
-  - `G`：若处于悬挂或攀爬状态则触发【RELEASE_EDGE】脱手下落；其余状态切换平台导航图
+  - `G`：若处于挂墙或悬挂状态则触发【WALL_RELEASE / RELEASE_EDGE】脱手下落；其余状态切换平台导航图
   - `F14`：切换【Platform Navigation Graph 平台导航图】调试线框（按 `T` 输出当前导航摘要）
   - `F15` / `X`：切换【Autonomous Jump Planner 自主跳跃规划】调试视图（按 `P` 单次触发自主规划）
   - `F16` / `Z`：切换【Edge Grab 平台边缘抓取】调试视图（显示端点、判定框与抓取爪点）
   - `F17`：切换【Edge Climb-Up 平台翻越攀爬】调试视图（显示攀爬轨迹、Clearance框与相位）
-  - `TAB`：切换多显示器并重新生成表面与清理UI缓存（悬挂与攀爬时自动安全脱落）
+  - `F18`：切换【Wall Attachment 垂直墙面攀爬】调试视图（显示墙面竖线、端点与附着状态）
+  - `TAB`：切换多显示器并重新生成表面与清理UI缓存（挂墙、悬挂与翻越时自动安全脱落）
   - `C`：切换指针好奇跟随模式
   - `ESC` / `Alt + F4`：安全退出
 
