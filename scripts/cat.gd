@@ -15,6 +15,9 @@ const ClimbTargetClass = preload("res://scripts/world/climb_target.gd")
 const WallAttachmentClass = preload("res://scripts/world/wall_attachment.gd")
 const CatMetricsClass = preload("res://scripts/cat/cat_metrics.gd")
 const CatBodyProfileClass = preload("res://scripts/cat/cat_body_profile.gd")
+const CatAnimationControllerClass = preload("res://scripts/cat/cat_animation_controller.gd")
+const CatShadowClass = preload("res://scripts/cat/cat_shadow.gd")
+const CatSpriteLoaderClass = preload("res://scripts/cat/cat_sprite_loader.gd")
 
 var metrics: RefCounted = null
 var metrics_debug_enabled: bool = false
@@ -127,7 +130,36 @@ var move_speed_mode: String = "RUN"
 var target_reached_radius: float = 50.0
 var pointer_follow_distance: float = 64.0
 
-@onready var _animated_sprite: AnimatedSprite2D = $AnimatedSprite2D
+var _visual_root: Node2D = null
+var visual_root: Node2D:
+	get:
+		if _visual_root == null: _visual_root = get_node_or_null("VisualRoot")
+		return _visual_root
+	set(v): _visual_root = v
+
+var _cat_shadow: Node2D = null
+var cat_shadow: Node2D:
+	get:
+		if _cat_shadow == null:
+			_cat_shadow = get_node_or_null("CatShadow")
+			if _cat_shadow and _cat_shadow.has_method("setup"): _cat_shadow.setup(self)
+		return _cat_shadow
+	set(v): _cat_shadow = v
+
+var _anim_controller: Node2D = null
+var anim_controller: Node2D:
+	get:
+		if _anim_controller == null:
+			_anim_controller = get_node_or_null("CatAnimationController")
+			if _anim_controller == null:
+				_anim_controller = CatAnimationControllerClass.new()
+				add_child(_anim_controller)
+				var sprite := _get_animated_sprite()
+				_anim_controller.setup(self, visual_root if visual_root != null else self, sprite)
+		return _anim_controller
+	set(v): _anim_controller = v
+
+var _animated_sprite: AnimatedSprite2D = null
 @onready var _main_node: Node = get_parent()
 
 func _init() -> void:
@@ -176,9 +208,12 @@ func reset_user_scale() -> void:
 
 func _apply_metrics_change() -> void:
 	_sync_metrics_properties()
-	var sprite := _get_animated_sprite()
-	if sprite:
-		sprite.scale = Vector2(metrics.final_scale, metrics.final_scale)
+	if visual_root != null:
+		visual_root.scale = Vector2(metrics.final_scale, metrics.final_scale)
+	else:
+		var sprite := _get_animated_sprite()
+		if sprite:
+			sprite.scale = Vector2(metrics.final_scale, metrics.final_scale)
 	var col_shape: CollisionShape2D = get_node_or_null("Area2D/CollisionShape2D")
 	if col_shape and col_shape.shape is RectangleShape2D:
 		col_shape.shape.size = metrics.hitbox_size
@@ -249,12 +284,43 @@ func toggle_physics_debug() -> bool:
 	queue_redraw()
 	return physics_debug_enabled
 
+func _enter_tree() -> void:
+	if visual_root == null:
+		visual_root = get_node_or_null("VisualRoot")
+	if cat_shadow == null:
+		cat_shadow = get_node_or_null("CatShadow")
+		if cat_shadow and cat_shadow.has_method("setup"):
+			cat_shadow.setup(self)
+	var sprite := _get_animated_sprite()
+	if sprite != null and (sprite.sprite_frames == null or not sprite.sprite_frames.has_animation("jump")):
+		sprite.sprite_frames = CatSpriteLoaderClass.load_cat_sprite_frames()
+	if anim_controller == null:
+		anim_controller = CatAnimationControllerClass.new()
+		add_child(anim_controller)
+		anim_controller.setup(self, visual_root if visual_root != null else self, sprite)
+
 func _ready() -> void:
 	if metrics == null: metrics = CatMetricsClass.new()
+	if visual_root == null: visual_root = get_node_or_null("VisualRoot")
+	if cat_shadow == null:
+		cat_shadow = get_node_or_null("CatShadow")
+		if cat_shadow and cat_shadow.has_method("setup"):
+			cat_shadow.setup(self)
+
 	var vp_size := _get_viewport_size()
 	var b_scale: float = CatMetricsClass.calc_base_scale_from_screen_height(vp_size.y)
 	metrics.update_scales(b_scale, metrics.user_scale)
 	_apply_metrics_change()
+
+	var sprite := _get_animated_sprite()
+	if sprite != null and (sprite.sprite_frames == null or not sprite.sprite_frames.has_animation("jump")):
+		sprite.sprite_frames = CatSpriteLoaderClass.load_cat_sprite_frames()
+
+	if anim_controller == null:
+		anim_controller = CatAnimationControllerClass.new()
+		add_child(anim_controller)
+		anim_controller.setup(self, visual_root if visual_root != null else self, sprite)
+
 	ground_y = vp_size.y - 48.0
 	if position.y == 0.0: position = Vector2(vp_size.x / 2.0, ground_y)
 	_prev_foot_y = get_foot_position().y
@@ -1135,7 +1201,12 @@ func _on_clicked() -> void:
 	if main_p and "mouse_perception_controller" in main_p and main_p.mouse_perception_controller: main_p.mouse_perception_controller.suppress_curiosity()
 
 func _get_animated_sprite() -> AnimatedSprite2D:
-	if not _animated_sprite: _animated_sprite = get_node_or_null("AnimatedSprite2D")
+	if not _animated_sprite:
+		_animated_sprite = get_node_or_null("VisualRoot/AnimatedSprite2D")
+		if not _animated_sprite:
+			_animated_sprite = get_node_or_null("AnimatedSprite2D")
+	if _animated_sprite and (_animated_sprite.sprite_frames == null or not _animated_sprite.sprite_frames.has_animation("jump")):
+		_animated_sprite.sprite_frames = CatSpriteLoaderClass.load_cat_sprite_frames()
 	return _animated_sprite
 
 func _get_viewport_size() -> Vector2:

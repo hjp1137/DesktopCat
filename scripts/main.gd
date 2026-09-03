@@ -294,6 +294,14 @@ func _handle_key_event(event: InputEventKey) -> bool:
 				var ok: bool = screen_exploration_controller.trigger_exploration_decision(true)
 				print("[Main] E 键触发自主屏幕探索决策: %s" % ("成功启动" if ok else "未触发(无候选/正在执行)"))
 			return true
+		KEY_F22:
+			if is_instance_valid(cat) and cat.anim_controller and cat.anim_controller.has_method("toggle_debug"):
+				cat.anim_controller.toggle_debug()
+			return true
+		KEY_7:
+			if is_instance_valid(cat) and cat.anim_controller and cat.anim_controller.has_method("toggle_showcase"):
+				cat.anim_controller.toggle_showcase()
+			return true
 		KEY_BRACKETLEFT:
 			if is_instance_valid(cat) and cat.has_method("adjust_user_scale"):
 				cat.adjust_user_scale(-0.1)

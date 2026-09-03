@@ -13,6 +13,9 @@ const WallAttachmentClass = preload("res://scripts/world/wall_attachment.gd")
 const ExplorationGoalClass = preload("res://scripts/exploration/exploration_goal.gd")
 const ExplorationMemoryClass = preload("res://scripts/exploration/exploration_memory.gd")
 const ScreenExplorationControllerClass = preload("res://scripts/exploration/screen_exploration_controller.gd")
+const CatSpriteLoaderClass = preload("res://scripts/cat/cat_sprite_loader.gd")
+const CatAnimationControllerClass = preload("res://scripts/cat/cat_animation_controller.gd")
+const CatShadowClass = preload("res://scripts/cat/cat_shadow.gd")
 
 func _init() -> void:
 
@@ -1546,7 +1549,158 @@ func _init() -> void:
 	assert(exp_ctrl.can_start_exploration() == false, "避退期间禁止开启新探索")
 	planner_t22.cancel_route("TEST_FINISHED")
 	planner_t22.exploration_controller = null
+	planner_t22.autonomous_traversal_enabled = false
+	planner.autonomous_traversal_enabled = false
+	exp_ctrl.autonomous_exploration_enabled = false
+	cmd_mgr.send_command(CommandManager.CatCommand.SIT)
 	print("[PASS] 测试 120: 意外落点吸收与连续失败避退保护验证成功")
+
+	# ========== T24: Art & Animation Upgrade 单元测试 ==========
+	# 测试 121: CatSpriteLoader 加载完整 16 套动画契约与帧数验证
+	var sf: SpriteFrames = CatSpriteLoaderClass.load_cat_sprite_frames()
+	assert(sf != null, "应当成功生成 SpriteFrames")
+	var expected_anims = [
+		"idle", "walk", "run", "sit", "sleep", "wake", "jump", "fall",
+		"land", "dragged", "edge_grab", "edge_hang", "climb_up",
+		"wall_cling", "wall_climb_up", "wall_climb_down"
+	]
+	for a_name in expected_anims:
+		assert(sf.has_animation(a_name), "必须包含动画契约要求的动画: " + a_name)
+		assert(sf.get_frame_count(a_name) >= 3, "动画帧数必须 >= 3: " + a_name)
+	print("[PASS] 测试 121: CatSpriteLoader 加载完整 16 套动画契约与帧数验证成功")
+
+	# 测试 122: 验证 16 组动画的纹理画布尺寸统一为 64x64 且无空帧
+	for a_name in expected_anims:
+		for f_idx in range(sf.get_frame_count(a_name)):
+			var tex: Texture2D = sf.get_frame_texture(a_name, f_idx)
+			assert(tex != null, "纹理帧不能为 null: %s[%d]" % [a_name, f_idx])
+			assert(tex.get_size() == Vector2(64, 64), "帧尺寸必须严格为 64x64: %s[%d]" % [a_name, f_idx])
+	print("[PASS] 测试 122: 16 组动画统一 64x64 画布与无空帧验证成功")
+
+	# 测试 123: CatBodyProfile REFERENCE_POSE 与 Foot/Grab/Wall 归一化锚点验证
+	var body_profile = cat.metrics.profile
+	assert(body_profile.reference_pose == "IDLE_STAND_FOUR_LEGS", "基准参考姿态必须为四足站立")
+	assert(body_profile.normalized_foot_point == Vector2(0.5, 0.906), "归一化脚底接触点必须对齐 (0.5, 0.906)")
+	assert(body_profile.normalized_left_grab_point.x < 0.5, "左爪抓点 X 必须在左半身")
+	assert(body_profile.normalized_right_grab_point.x > 0.5, "右爪抓点 X 必须在右半身")
+	print("[PASS] 测试 123: CatBodyProfile REFERENCE_POSE 与归一化锚点验证成功")
+
+	# 测试 124: VisualRoot 节点挂载与 final_scale 等比缩放解耦验证
+	assert(cat.visual_root != null, "Cat 场景中必须存在 VisualRoot 节点")
+	assert(cat.visual_root.get_parent() == cat, "VisualRoot 必须为 Cat 的直接子节点")
+	assert(cat.visual_root.scale == Vector2(cat.metrics.final_scale, cat.metrics.final_scale), "VisualRoot 应当同步接收 final_scale")
+	print("[PASS] 测试 124: VisualRoot 节点挂载与等比缩放解耦验证成功")
+
+	# 测试 125: CatShadow 节点挂载与地面/空中/挂壁状态自适应验证
+	assert(cat.cat_shadow != null, "Cat 场景中必须挂载 CatShadow 节点")
+	assert(cat.cat_shadow.z_index == -1, "阴影层级必须在身体下方 (z_index = -1)")
+	print("[PASS] 测试 125: CatShadow 节点挂载与自适应阴影验证成功")
+
+	# 测试 126: CatAnimationController 地面状态 (IDLE, WALK, RUN, SIT, SLEEP) 精确映射
+	var a_ctrl = cat.anim_controller
+	assert(a_ctrl != null, "Cat 必须挂载 CatAnimationController")
+	cat.current_state = Cat.CatState.IDLE
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "idle", "IDLE 状态必须映射为 idle 动画")
+	cat.current_state = Cat.CatState.WALK
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "walk", "WALK 状态必须映射为 walk 动画")
+	cat.current_state = Cat.CatState.RUN
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "run", "RUN 状态必须映射为 run 动画")
+	cat.current_state = Cat.CatState.SIT
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "sit", "SIT 状态必须映射为 sit 动画")
+	cat.current_state = Cat.CatState.SLEEP
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "sleep", "SLEEP 状态必须映射为 sleep 动画")
+	print("[PASS] 测试 126: CatAnimationController 地面状态精确映射验证成功")
+
+	# 测试 127: JUMP 与 FALL 状态依据速度矢量精准映射
+	cat.current_state = Cat.CatState.JUMP
+	cat.vertical_velocity = -180.0
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "jump", "向上跳跃必须映射为 jump 动画")
+	cat.vertical_velocity = 120.0
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "fall", "跳跃转下落必须自动过渡为 fall 动画")
+	cat.current_state = Cat.CatState.FALL
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "fall", "FALL 状态必须映射为 fall 动画")
+	print("[PASS] 测试 127: JUMP 与 FALL 依据垂直速度精准映射验证成功")
+
+	# 测试 128: DRAG 拖拽状态映射为 dragged 动画
+	cat.current_state = Cat.CatState.DRAG
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "dragged", "DRAG 状态必须映射为 dragged 动画")
+	print("[PASS] 测试 128: DRAG 拖拽状态映射验证成功")
+
+	# 测试 129: EDGE_HANG 与瞬态 edge_grab 映射验证
+	cat.current_state = Cat.CatState.EDGE_HANG
+	a_ctrl.is_edge_grab_trans = false
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "edge_hang", "EDGE_HANG 必须映射为 edge_hang 动画")
+	a_ctrl.is_edge_grab_trans = true
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "edge_grab", "边缘抓入瞬间必须播放 edge_grab 过渡动画")
+	a_ctrl.is_edge_grab_trans = false
+	print("[PASS] 测试 129: EDGE_HANG 与 edge_grab 动画映射验证成功")
+
+	# 测试 130: CLIMB_UP 两段式登顶翻越映射验证
+	cat.current_state = Cat.CatState.CLIMB_UP
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "climb_up", "CLIMB_UP 必须映射为 climb_up 专属翻越动画")
+	print("[PASS] 测试 130: CLIMB_UP 登顶翻越动画映射验证成功")
+
+	# 测试 131: WALL_CLING 附壁映射验证
+	cat.current_state = Cat.CatState.WALL_CLING
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "wall_cling", "WALL_CLING 必须映射为 wall_cling 动画")
+	print("[PASS] 测试 131: WALL_CLING 附壁动画映射验证成功")
+
+	# 测试 132: WALL_CLIMB 双向爬行映射验证
+	cat.current_state = Cat.CatState.WALL_CLIMB
+	cat.vertical_velocity = -60.0
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "wall_climb_up", "向上爬壁必须映射为 wall_climb_up 动画")
+	cat.vertical_velocity = 60.0
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "wall_climb_down", "向下爬壁必须映射为 wall_climb_down 动画")
+	print("[PASS] 测试 132: WALL_CLIMB 双向爬壁动画映射验证成功")
+
+	# 测试 133: 落地缓冲 land 动画与 VisualRoot 弹性 Squash 验证
+	cat.current_state = Cat.CatState.IDLE
+	a_ctrl._on_cat_landed("ground")
+	assert(a_ctrl.is_landing_trans == true, "着陆应当触发落地过渡标志")
+	assert(a_ctrl.squash_timer > 0.0, "着陆应当启动 Visual Squash 计时")
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().animation == "land", "落地瞬间必须优先播放 land 动画")
+	# 模拟经过 0.25 秒缓冲后恢复
+	a_ctrl._process(0.25)
+	assert(a_ctrl.is_landing_trans == false, "缓冲结束后清除 landing 标志")
+	assert(cat.visual_root.scale == Vector2(cat.metrics.final_scale, cat.metrics.final_scale), "Squash 结束后 VisualRoot 缩放平滑回弹至 (final_scale, final_scale)")
+	print("[PASS] 测试 133: 落地缓冲动画与 VisualRoot 弹性 Squash 验证成功")
+
+	# 测试 134: 朝向翻转 (flip_h) 逻辑验证
+	cat.direction = -1.0
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().flip_h == true, "向左移动时 flip_h 必须为 true")
+	cat.direction = 1.0
+	a_ctrl.update_animation()
+	assert(cat._get_animated_sprite().flip_h == false, "向右移动时 flip_h 必须为 false")
+	print("[PASS] 测试 134: 朝向翻转 (flip_h) 验证成功")
+
+	# 测试 135: 动画轮播展示与 F22 调试 HUD 切换验证
+	assert(a_ctrl.anim_showcase_mode == false, "默认 showcase 模式关闭")
+	a_ctrl.toggle_showcase()
+	assert(a_ctrl.anim_showcase_mode == true, "toggle_showcase 应当切换开启")
+	a_ctrl.toggle_showcase()
+	assert(a_ctrl.anim_showcase_mode == false, "toggle_showcase 应当切换关闭")
+	assert(a_ctrl.debug_draw_enabled == false, "默认 debug HUD 关闭")
+	a_ctrl.toggle_debug()
+	assert(a_ctrl.debug_draw_enabled == true, "toggle_debug 应当切换开启 (F22)")
+	a_ctrl.toggle_debug()
+	print("[PASS] 测试 135: 动画轮播展示与 F22 调试 HUD 切换验证成功")
 
 	planner_t22.queue_free()
 	exp_ctrl.queue_free()
@@ -1558,7 +1712,7 @@ func _init() -> void:
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
 	planner.queue_free()
-	print("========== T23 Autonomous Screen Exploration 单元测试全部通过 (共120项测试) ==========")
+	print("========== T24 Art & Animation Upgrade 单元测试全部通过 (共135项测试) ==========")
 	quit(0)
 
 

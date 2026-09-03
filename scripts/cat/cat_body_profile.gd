@@ -28,6 +28,16 @@ var snap_tolerance_ratio: float = 0.15
 var climb_inward_margin_ratio: float = 0.38
 var climb_clearance_margin_ratio: float = 0.08
 
+const REFERENCE_POSE: String = "IDLE_STAND_FOUR_LEGS"
+var reference_pose: String = REFERENCE_POSE
+var normalized_foot_point: Vector2 = Vector2(0.5, 0.906)
+var normalized_foot_width: float = 0.82
+var normalized_left_grab_point: Vector2 = Vector2(0.28, 0.594)
+var normalized_right_grab_point: Vector2 = Vector2(0.72, 0.594)
+var normalized_left_wall_contact: Vector2 = Vector2(0.25, 0.594)
+var normalized_right_wall_contact: Vector2 = Vector2(0.75, 0.594)
+var normalized_hit_region: Rect2 = Rect2(0.125, 0.25, 0.75, 0.656)
+
 func to_dict() -> Dictionary:
 	return {
 		"raw_width": raw_width, "raw_height": raw_height,

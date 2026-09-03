@@ -80,6 +80,13 @@
   - Top-K 轮盘赌加权随机决策，结合自然到达逗留（`ARRIVAL_DWELL` 1.5~4.0s）与探索冷却（`EXPLORATION_COOLDOWN` 4~10s）；
   - 周期 2/3/4 小循环检测与 `-12.0` 破圈惩罚，连续失败触发 15s 退避（`EXPLORATION_BACKOFF`）；意外落点容错吸收为有效访问；
   - 最高优先级保障：用户命令、拖拽、指针好奇、睡眠与挂墙/攀爬状态互斥保护；支持 `F21` 调试 HUD 与 `E` 键手动决策。
+- **T24 角色美术与动画系统全面升级 (Art & Animation Upgrade)**：
+  - 全套 16 组原创萌系暖金白腹猫咪高清序列帧（74 帧，无版权风险），覆盖地面（idle, walk, run, sit, sleep, wake）、空中（jump, fall, land）、交互（dragged）、攀爬挂壁（edge_grab, edge_hang, climb_up, wall_cling, wall_climb_up, wall_climb_down）；
+  - 建立统一 Foot Lock，足底绝对锁定于画布 Y=58，地面行走跳跃零漂移；
+  - 架构实现 Physics Root 与 Visual Root 彻底解耦，缩放与视觉反馈（落地 0.15s 弹性 Squash & Stretch）仅作用于 Visual 层，物理事实完全由 CatMetrics 驱动；
+  - 原生半透明轻量软阴影（`CatShadow`），随高度与挂墙自适应缩放隐退，零碰撞遮挡；
+  - 运行时 `CatSpriteLoader` 原生纹理装配，绕开引擎编译缓存与 headless 丢失风险；
+  - 支持 `F22` 动画调试 HUD 与 `7` 键全动画展示轮播（Showcase Mode）。
 
 ## 运行方式与快捷键
 
@@ -104,6 +111,8 @@
   - `F19`：切换【Cat Metrics 几何度量与包围盒】调试视图（显示身体、脚底、抓点、挂墙点与多边形）
   - `F20`：切换【Climb Navigation Route 攀爬融合路线规划】调试视图（按 `R` 手动触发多步攀爬路线搜索与测试）
   - `F21`：切换【Autonomous Exploration 自主屏幕探索】调试视图（显示状态、评分榜、破圈次数与 Top 5 候选标记）
+  - `F22`：切换【Cat Animation 角色动画与视觉调试】HUD 视图
+  - `7`：切换【Animation Showcase 动画顺序轮播展示】模式
   - `E`：手动强制触发一次【自主屏幕探索决策】（开发调试）
   - `[` / `]`：调节小猫用户缩放（User Scale -0.1 / +0.1，支持 0.70~1.60 范围）
   - `\`：重置小猫用户缩放到默认值（1.00）
