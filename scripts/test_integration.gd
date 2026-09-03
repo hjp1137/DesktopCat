@@ -33,16 +33,19 @@ func _process(delta: float) -> bool:
 
 	elif step_idx == 2 and elapsed_time > 0.9:
 		step_idx = 3
-		print("========== 阶段 3: 发送 window_snapshot 快照 ==========")
+		print("========== 阶段 3: 发送 window_snapshot 与 ui_snapshot 快照 ==========")
 		var snap_str := "{\"v\":1,\"type\":\"window_snapshot\",\"revision\":1,\"screen\":{\"index\":0,\"width\":1920,\"height\":1080},\"windows\":[{\"id\":\"0x30094\",\"title\":\"Chrome\",\"x\":200.0,\"y\":150.0,\"width\":1000.0,\"height\":700.0,\"is_foreground\":true,\"z_order\":0}]}\n"
 		tcp_client.put_data(snap_str.to_utf8_buffer())
+		var ui_snap_str := "{\"v\":1,\"type\":\"ui_snapshot\",\"revision\":1,\"screen\":{\"index\":0,\"width\":1920,\"height\":1080},\"elements\":[{\"id\":\"0x30094:btn1\",\"window_id\":\"0x30094\",\"control_type\":\"Button\",\"x\":250.0,\"y\":160.0,\"width\":90.0,\"height\":32.0}]}\n"
+		tcp_client.put_data(ui_snap_str.to_utf8_buffer())
 
 	elif step_idx == 3 and elapsed_time > 1.3:
 		step_idx = 4
-		print("========== 阶段 4: 验证 WindowWorldModel 与 SurfaceWorldModel 同步 ==========")
+		print("========== 阶段 4: 验证 WindowWorldModel、SurfaceWorldModel 与 UIElementWorldModel 同步 ==========")
 		assert(main_scene.surface_world_model.surfaces_by_id.has("0x30094:top"), "SurfaceWorldModel 应生成 0x30094:top")
 		assert(main_scene.surface_world_model.surfaces_by_id.has("screen:ground"), "SurfaceWorldModel 应生成 screen:ground")
-		print("========== 阶段 4b: 触发 F8、F9 与 F10 切换 Debug 绘制 ==========")
+		assert(main_scene.ui_element_world_model.elements_by_id.has("0x30094:btn1"), "UIElementWorldModel 应生成 0x30094:btn1")
+		print("========== 阶段 4b: 触发 F8、F9、F10 与 F11 切换 Debug 绘制 ==========")
 		var ev_f8 := InputEventKey.new(); ev_f8.keycode = KEY_F8; ev_f8.pressed = true
 		main_scene._input(ev_f8)
 		assert(main_scene.window_world_model.debug_draw_enabled == true, "F8 应成功开启 Window Debug")
@@ -52,10 +55,14 @@ func _process(delta: float) -> bool:
 		var ev_f10 := InputEventKey.new(); ev_f10.keycode = KEY_F10; ev_f10.pressed = true
 		main_scene._input(ev_f10)
 		assert(main_scene.cat.physics_debug_enabled == true, "F10 应成功开启 Physics Debug")
+		var ev_f11 := InputEventKey.new(); ev_f11.keycode = KEY_F11; ev_f11.pressed = true
+		main_scene._input(ev_f11)
+		assert(main_scene.ui_element_world_model.debug_draw_enabled == true, "F11 应成功开启 UI Debug")
 
 		print("========== 阶段 4c: 验证小猫下落着陆到 Chrome 顶边 ==========")
 		main_scene.cat.position = Vector2(400.0, 100.0)
 		main_scene.cat.vertical_velocity = 800.0
+
 		main_scene.cat.is_grounded = false
 		main_scene.cat.change_state(Cat.CatState.FALL)
 

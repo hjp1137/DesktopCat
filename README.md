@@ -33,12 +33,23 @@
   - `F8` / `-` / `V`：切换【窗口矩形】调试线框
   - `F9` / `=` / `B`：切换【Surface 物理表面】调试线框
   - `F10` / `N` / `M`：切换【Cat 物理接触点与站立表面】高亮
-  - `TAB`：切换多显示器并重新生成表面
+  - `F11` / `K` / `O` / `U`：切换【UI Automation 控件几何】调试线框
+  - `TAB`：切换多显示器并重新生成表面与清理UI缓存
   - `C`：切换指针好奇跟随模式
   - `ESC` / `Alt + F4`：安全退出
 
-### 2. 启动 Windows 窗口感知服务
-```bash
-python tools/perception/window_perception.py
-```
-按 `F8` 查看 Windows 窗口，按 `F9` 查看物理平台，按 `F10` 查看小猫当前站立表面与物理接触点。
+### 2. 启动 Windows 感知服务
+- **窗口几何感知服务** (10Hz)：
+  ```bash
+  python tools/perception/window_perception.py
+  ```
+- **UI Automation 控件感知服务** (2Hz，零第三方依赖)：
+  ```bash
+  python tools/perception/ui_automation_perception.py
+  ```
+- **统一多 Provider 感知调度器**：
+  ```bash
+  python tools/perception/perception_service.py
+  ```
+按 `F8` 查看窗口，`F9` 查看物理表面，`F10` 查看小猫接触点，`F11` 查看 Windows 窗口内部 UI 控件几何！
+

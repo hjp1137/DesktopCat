@@ -210,12 +210,75 @@ func _init() -> void:
 	assert(cat.is_grounded == false and cat.current_state == Cat.CatState.FALL, "平台消失后小猫应当失去支撑坠落")
 	print("[PASS] 测试 17: 窗口关闭/平台消失自动下落验证成功")
 
+	# ========== T14 UI Automation Element Perception 单元测试 ==========
+	var UIElementWorldModelClass = load("res://scripts/world/ui_element_world_model.gd")
+	var ui_model = UIElementWorldModelClass.new()
+	root.add_child(ui_model)
+	bridge.ui_element_world_model = ui_model
+
+	# 测试 18: UI 快照解析与属性提取
+	var sample_ui_snap = {
+		"v": 1,
+		"type": "ui_snapshot",
+		"revision": 1,
+		"screen": {"index": 0, "width": 1920, "height": 1080},
+		"elements": [
+			{"id": "0x100:1", "window_id": "0x100", "control_type": "Button", "x": 100.0, "y": 200.0, "width": 80.0, "height": 30.0},
+			{"id": "0x100:2", "window_id": "0x100", "control_type": "Edit", "x": 200.0, "y": 200.0, "width": 150.0, "height": 30.0},
+			{"id": "0x100:3", "window_id": "0x100", "control_type": "Text", "x": 100.0, "y": 150.0, "width": 120.0, "height": 20.0}
+		]
+	}
+	var update_res: bool = ui_model.update_from_snapshot(sample_ui_snap)
+	assert(update_res == true, "UI 快照应成功更新")
+	assert(ui_model.elements_by_id.size() == 3, "应提取 3 个有效 UI 元素")
+	var btn = ui_model.elements_by_id["0x100:1"]
+	assert(btn.control_type == "Button" and btn.rect == Rect2(100.0, 200.0, 80.0, 30.0), "Button 属性提取正确")
+	print("[PASS] 测试 18: UI 快照解析与属性提取验证成功")
+
+	# 测试 19: 版本防倒退
+	var old_ui_snap = {
+		"v": 1, "type": "ui_snapshot", "revision": 1, "elements": []
+	}
+	assert(ui_model.update_from_snapshot(old_ui_snap) == false, "旧或相同版本号快照应当被忽略")
+	assert(ui_model.elements_by_id.size() == 3, "元素数据不应被倒退版本覆盖")
+	print("[PASS] 测试 19: UI 版本防倒退验证成功")
+
+	# 测试 20: 极小尺寸元素过滤 (<4px)
+	var tiny_ui_snap = {
+		"v": 1, "type": "ui_snapshot", "revision": 2,
+		"elements": [
+			{"id": "0x100:good", "window_id": "0x100", "control_type": "Pane", "x": 50.0, "y": 50.0, "width": 100.0, "height": 100.0},
+			{"id": "0x100:tiny", "window_id": "0x100", "control_type": "Other", "x": 10.0, "y": 10.0, "width": 2.0, "height": 2.0}
+		]
+	}
+	assert(ui_model.update_from_snapshot(tiny_ui_snap) == true, "新版本快照更新成功")
+	assert(ui_model.elements_by_id.has("0x100:good") and not ui_model.elements_by_id.has("0x100:tiny"), "极小尺寸元素应被过滤")
+	print("[PASS] 测试 20: 极小尺寸元素过滤验证成功")
+
+	# 测试 21: 空间与类型查询 API
+	var all_elems = ui_model.get_all_elements()
+	var panes = ui_model.get_elements_by_type("Pane")
+	var near_elems = ui_model.get_elements_near(Vector2(100.0, 100.0), 30.0)
+	assert(all_elems.size() == 1 and panes.size() == 1 and near_elems.size() == 1, "查询 API 返回正确")
+
+	print("[PASS] 测试 21: 空间与类型查询 API 验证成功")
+
+	# 测试 22: F11 调试开关
+	assert(ui_model.debug_draw_enabled == false, "默认 Debug Draw 为关闭")
+	ui_model.toggle_debug_draw()
+	assert(ui_model.debug_draw_enabled == true, "toggle 后 Debug Draw 应开启")
+	ui_model.toggle_debug_draw()
+	assert(ui_model.debug_draw_enabled == false, "再次 toggle 后 Debug Draw 应关闭")
+	print("[PASS] 测试 22: F11 调试开关验证成功")
+
+	ui_model.queue_free()
 	surf_model.queue_free()
 	bridge.stop_server(); bridge.queue_free()
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
-	print("========== T13 Multi-Surface Cat Physics 单元测试全部通过 ==========")
+	print("========== T14 UI Automation Perception 单元测试全部通过 ==========")
 	quit(0)
+
 
 
 

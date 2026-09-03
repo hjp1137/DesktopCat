@@ -27,15 +27,18 @@ const ALLOWED_COMMANDS: Dictionary = {
 var port: int = DEFAULT_PORT
 var server: TCPServer = null
 var client: StreamPeerTCP = null
+var clients: Array = []
 var input_buffer: PackedByteArray = PackedByteArray()
+
 var command_manager: CommandManager = null
 var cat: Node2D = null
 var main_node: Node2D = null
 var window_world_model: Node = null
 var surface_world_model: Node = null
-
+var ui_element_world_model: Node = null
 
 func _ready() -> void:
+
 	start_server(port)
 
 func start_server(bind_port: int = DEFAULT_PORT) -> bool:
@@ -49,8 +52,12 @@ func start_server(bind_port: int = DEFAULT_PORT) -> bool:
 	return false
 
 func stop_server() -> void:
+	for c in clients:
+		if c.peer: c.peer.disconnect_from_host()
+	clients.clear()
 	if client:
-		_cleanup_client("Server stopping")
+		client.disconnect_from_host()
+		client = null
 	if server:
 		server.stop()
 		print("[Bridge] Server stopped")
@@ -58,33 +65,45 @@ func stop_server() -> void:
 func _process(_delta: float) -> void:
 	if not server or not server.is_listening():
 		return
-	if client == null:
-		if server.is_connection_available():
-			client = server.take_connection()
-			input_buffer.clear()
-			print("[Bridge] Client connected")
-			_send_hello()
-	else:
-		if server.is_connection_available():
-			var extra := server.take_connection()
-			if extra: extra.disconnect_from_host()
-		client.poll()
-		if client.get_status() != StreamPeerTCP.STATUS_CONNECTED:
-			_cleanup_client("Client disconnected")
-			return
-		var avail := client.get_available_bytes()
+	while server.is_connection_available():
+		var new_peer := server.take_connection()
+		if new_peer:
+			if clients.size() >= 8:
+				new_peer.disconnect_from_host()
+			else:
+				var c_entry := {"peer": new_peer, "buffer": PackedByteArray()}
+				clients.append(c_entry)
+				client = new_peer
+				print("[Bridge] Client connected (%d active)" % clients.size())
+				_send_hello()
+
+	var to_remove: Array = []
+	for c in clients:
+		var peer: StreamPeerTCP = c.peer
+		peer.poll()
+		if peer.get_status() != StreamPeerTCP.STATUS_CONNECTED:
+			to_remove.append(c)
+			continue
+		var avail := peer.get_available_bytes()
 		if avail > 0:
-			if input_buffer.size() + avail > MAX_BUFFER_SIZE:
-				_send_error("BUFFER_OVERFLOW", "Input buffer limit exceeded")
-				_cleanup_client("Buffer overflow")
-				return
-			var res := client.get_data(avail)
+			if c.buffer.size() + avail > MAX_BUFFER_SIZE:
+				to_remove.append(c)
+				continue
+			var res := peer.get_data(avail)
 			if res[0] == OK:
-				input_buffer.append_array(res[1])
-				_process_input_buffer()
+				c.buffer.append_array(res[1])
+				_process_client_buffer(c)
+
+	for c in to_remove:
+		if c.peer: c.peer.disconnect_from_host()
+		clients.erase(c)
+		if client == c.peer:
+			client = clients[-1].peer if not clients.is_empty() else null
+		print("[Bridge] Client disconnected (%d active)" % clients.size())
 
 func _cleanup_client(reason: String = "") -> void:
 	if client:
+
 		client.disconnect_from_host()
 		client = null
 	input_buffer.clear()
@@ -93,6 +112,23 @@ func _cleanup_client(reason: String = "") -> void:
 		print("[Bridge] %s" % reason)
 
 
+
+func _process_client_buffer(c: Dictionary) -> void:
+	var buf: PackedByteArray = c.buffer
+	while true:
+		var newline_idx := buf.find(10)
+		if newline_idx == -1:
+			break
+		var line_bytes := buf.slice(0, newline_idx)
+		buf = buf.slice(newline_idx + 1)
+		if line_bytes.size() > MAX_MESSAGE_SIZE:
+			_send_error("MESSAGE_TOO_LARGE", "Message exceeded 256KB")
+			continue
+		var line_str := line_bytes.get_string_from_utf8().strip_edges()
+		if line_str == "":
+			continue
+		_handle_raw_message(line_str)
+	c.buffer = buf
 
 func _process_input_buffer() -> void:
 	while true:
@@ -104,6 +140,7 @@ func _process_input_buffer() -> void:
 		if line_bytes.size() > MAX_MESSAGE_SIZE:
 			_send_error("MESSAGE_TOO_LARGE", "Message exceeded 256KB")
 			continue
+
 		var line_str := line_bytes.get_string_from_utf8().strip_edges()
 		if line_str == "":
 			continue
@@ -125,8 +162,10 @@ func _handle_raw_message(msg_str: String) -> void:
 		"get_status": _send_status()
 		"command": _handle_command_message(data)
 		"window_snapshot": _handle_window_snapshot(data)
+		"ui_snapshot": _handle_ui_snapshot(data)
 		"surface_snapshot": _send_error("NOT_IMPLEMENTED", "Surface snapshots are reserved for future versions")
 		_: _send_error("UNKNOWN_TYPE", "Unknown message type: " + mtype)
+
 
 func _handle_window_snapshot(data: Dictionary) -> void:
 	var raw_windows = data.get("windows", null)
@@ -155,6 +194,16 @@ func _handle_window_snapshot(data: Dictionary) -> void:
 	var rev: int = int(data.get("revision", 0))
 	_send_json({"v": PROTOCOL_VERSION, "type": "ok", "action": "window_snapshot", "revision": rev})
 
+func _handle_ui_snapshot(data: Dictionary) -> void:
+	if not is_instance_valid(ui_element_world_model) or not ui_element_world_model.has_method("update_from_snapshot"):
+		_send_error("SERVICE_UNAVAILABLE", "UIElementWorldModel not initialized")
+		return
+	var ok: bool = ui_element_world_model.update_from_snapshot(data)
+	if ok:
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "action": "ui_snapshot", "revision": int(data.get("revision", 0))})
+	else:
+		_send_error("IGNORED_SNAPSHOT", "Snapshot rejected or outdated revision")
+
 func _handle_command_message(data: Dictionary) -> void:
 	var cmd_name := str(data.get("name", "")).to_upper()
 	if cmd_name == "TOGGLE_DEBUG_WINDOWS":
@@ -172,6 +221,12 @@ func _handle_command_message(data: Dictionary) -> void:
 			cat.toggle_physics_debug()
 		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
 		return
+	if cmd_name in ["TOGGLE_DEBUG_UI", "TOGGLE_DEBUG_UI_ELEMENTS"]:
+		if is_instance_valid(ui_element_world_model) and ui_element_world_model.has_method("toggle_debug_draw"):
+			ui_element_world_model.toggle_debug_draw()
+		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
+		return
+
 
 
 	if not ALLOWED_COMMANDS.has(cmd_name):
@@ -224,10 +279,14 @@ func _send_error(code: String, message: String) -> void:
 	_send_json({"v": PROTOCOL_VERSION, "type": "error", "code": code, "message": message})
 
 func _send_json(dict: Dictionary) -> void:
-	if not client or client.get_status() != StreamPeerTCP.STATUS_CONNECTED:
-		return
 	var text := JSON.stringify(dict) + "\n"
-	client.put_data(text.to_utf8_buffer())
+	var bytes := text.to_utf8_buffer()
+	if client and client.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+		client.put_data(bytes)
+	for c in clients:
+		if c.peer and c.peer != client and c.peer.get_status() == StreamPeerTCP.STATUS_CONNECTED:
+			c.peer.put_data(bytes)
+
 
 func _get_overlay_info() -> Dictionary:
 	var s_idx: int = 0

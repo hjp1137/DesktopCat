@@ -273,6 +273,16 @@ class WindowPerceptionService:
                 print(f"[Perception] 检测到快捷键 [{name}]，切换【Cat 物理接触点与表面高亮】调试线框...")
                 self._send_msg({"v": 1, "type": "command", "name": "TOGGLE_DEBUG_PHYSICS"})
                 self._recv_line()
+        hotkeys_ui = {0x7A: "F11", 0x4B: "K", 0x4F: "O"}
+        for vk, name in hotkeys_ui.items():
+            is_down = bool(user32.GetAsyncKeyState(vk) & 0x8000)
+            was_down = self.hotkey_states.get(vk, False)
+            self.hotkey_states[vk] = is_down
+            if is_down and not was_down:
+                print(f"[Perception] 检测到快捷键 [{name}]，切换【UI Automation 控件几何】调试线框...")
+                self._send_msg({"v": 1, "type": "command", "name": "TOGGLE_DEBUG_UI"})
+                self._recv_line()
+
 
 
 

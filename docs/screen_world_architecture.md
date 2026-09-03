@@ -22,7 +22,8 @@
 1. **T11（已完成）**：顶层窗口几何感知（Window Geometry Perception），完成 Win32 数据采集、局部坐标转换、裁剪与 `WindowWorldModel` 存储；
 2. **T12（已完成）**：窗口几何转 Surface 物理世界（Surface World），提取 `PLATFORM`（顶边/底边/屏幕地面）与 `WALL`（左右侧边/屏幕墙），实现轻量顶边遮挡切分与空间查询 API，F9 独立调试渲染；
 3. **T13（已完成）**：多表面动态物理系统（Multi-Surface Cat Physics），正式打破单一 `ground_y` 世界假设，实现小猫跳跃/下落着陆到 Window Top、在窗口上行走/跑/坐/睡、边缘自然掉落、窗口拖拽跟随与 F10 物理调试；
-4. **T14（下一阶段）**：平台导航图 (Platform Navigation Graph)，建立平台间可达性关系网络；
-5. **T15**：自主跳跃规划 (Autonomous Jump Planning)；
-6. **T16**：抓边与攀爬系统 (Edge Grab + Climb)；
-7. **T17**：自主探索系统 (Autonomous Exploration)。
+4. **T14（已完成）**：Windows UI Automation 元素感知（UI Automation Element Perception），通过原生 COM 提取窗口内部控件几何（Button/Edit/Text 等），三维预算控制，F11 独立调试线框，不影响鼠标穿透；
+5. **T15（下一阶段）**：平台导航图 (Platform Navigation Graph)，建立平台间可达性关系网络；
+6. **T16**：UI 元素与物理表面融合与自主跳跃规划 (Surface Fusion & Jump Planning)；
+7. **T17**：抓边与攀爬系统 (Edge Grab + Climb)；
+8. **T18**：自主探索系统 (Autonomous Exploration)。
