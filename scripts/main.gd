@@ -11,6 +11,7 @@ const SurfaceFusionBuilderClass = preload("res://scripts/world/surface_fusion_bu
 const PlatformNavigationGraphClass = preload("res://scripts/navigation/platform_navigation_graph.gd")
 const AutonomousJumpPlannerClass = preload("res://scripts/navigation/autonomous_jump_planner.gd")
 const ScreenExplorationControllerClass = preload("res://scripts/exploration/screen_exploration_controller.gd")
+const SurfaceClass = preload("res://scripts/world/surface.gd")
 
 @onready var cat: Node2D = $Cat
 var command_manager: CommandManager = null
@@ -26,8 +27,9 @@ var platform_navigation_graph: RefCounted = null
 var autonomous_jump_planner: Node2D = null
 var screen_exploration_controller: Node2D = null
 var current_target_screen: int = 0
-
-
+var perception_service_pid: int = -1
+var fallback_timer: float = 0.0
+var fallback_demo_spawned: bool = false
 
 func _ready() -> void:
 
@@ -117,6 +119,7 @@ func _ready() -> void:
 		current_target_screen = get_window().current_screen
 		if current_target_screen < 0: current_target_screen = DisplayServer.window_get_current_screen()
 	_setup_transparent_overlay()
+	_try_start_perception_service()
 
 
 func _setup_transparent_overlay() -> void:
@@ -362,5 +365,75 @@ func get_overlay_info() -> Dictionary:
 		"height": sz.y,
 		"window_handle": wh
 	}
+
+func _process(delta: float) -> void:
+	if not fallback_demo_spawned and DisplayServer.get_name() != "headless":
+		fallback_timer += delta
+		if fallback_timer >= 3.0:
+			fallback_demo_spawned = true
+			_spawn_fallback_demo_surfaces()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_PREDELETE:
+		_cleanup_perception_service()
+
+func _try_start_perception_service() -> void:
+	if DisplayServer.get_name() == "headless": return
+	if OS.get_name() != "Windows": return
+	
+	var base_dir: String = OS.get_executable_path().get_base_dir()
+	var script_candidates = [
+		base_dir.path_join("../tools/perception/perception_service.py"),
+		base_dir.path_join("tools/perception/perception_service.py"),
+		ProjectSettings.globalize_path("res://tools/perception/perception_service.py")
+	]
+	var target_script: String = ""
+	for c in script_candidates:
+		if FileAccess.file_exists(c):
+			target_script = c
+			break
+	
+	if target_script == "":
+		print("[Main] 未检测到本地感知脚本，使用纯单机模式运行")
+		return
+
+	# 优先通过 pythonw.exe 静默启动感知服务 (避免弹出黑色控制台黑框)
+	var pid: int = OS.create_process("pythonw.exe", [target_script])
+	if pid <= 0:
+		pid = OS.create_process("python.exe", [target_script])
+	
+	if pid > 0:
+		perception_service_pid = pid
+		print("[Main] 已成功拉起后台桌面感知服务 (PID: %d): %s" % [pid, target_script])
+	else:
+		print("[Main] 尝试拉起感知服务失败，请确保 python 已配置于环境变量")
+
+func _cleanup_perception_service() -> void:
+	if perception_service_pid > 0:
+		print("[Main] 正在终止感知服务进程: %d" % perception_service_pid)
+		OS.kill(perception_service_pid)
+		perception_service_pid = -1
+
+func _spawn_fallback_demo_surfaces() -> void:
+	if surface_world_model == null: return
+	# 若已经有外部窗口实体接入 (表面数量 > 4)，则无需注入演示平台
+	if surface_world_model.surfaces.size() > 4: return
+	
+	var vp: Vector2 = Vector2(get_window().size) if get_window() else Vector2(1280, 720)
+	if vp.x <= 100 or vp.y <= 100: vp = Vector2(1920, 1080)
+	
+	var shelf_y: float = vp.y * 0.55
+	var shelf_x1: float = vp.x * 0.35
+	var shelf_x2: float = vp.x * 0.65
+	
+	print("[Main] 纯单机环境：自动注入演示桌面平台与垂直攀爬柱以供探索攀爬")
+	var surf_top = SurfaceClass.new("demo:shelf:top", "demo", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, shelf_x1, shelf_y, shelf_x2, shelf_y, true, false, false)
+	var surf_left = SurfaceClass.new("demo:shelf:left", "demo", "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, shelf_x1, shelf_y, shelf_x1, shelf_y + 180.0, false, false, true)
+	var surf_right = SurfaceClass.new("demo:shelf:right", "demo", "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.RIGHT, shelf_x2, shelf_y, shelf_x2, shelf_y + 180.0, false, false, true)
+	
+	surface_world_model.add_surface(surf_top)
+	surface_world_model.add_surface(surf_left)
+	surface_world_model.add_surface(surf_right)
+	surface_world_model.surface_world_updated.emit(surface_world_model.surface_revision)
 
 

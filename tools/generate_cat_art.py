@@ -5,18 +5,18 @@ from PIL import Image, ImageDraw
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "assets", "cat", "sprites")
 CANVAS_SIZE = (64, 64)
 
-# 统一原创暖橙白腹萌系桌宠猫配色方案
-COLOR_MAIN = (255, 158, 64, 255)       # 暖金橙
-COLOR_MAIN_DARK = (217, 107, 26, 255)  # 阴影与虎斑纹
-COLOR_BELLY = (255, 245, 235, 255)     # 乳白胸腹与爪套
-COLOR_EAR_INNER = (255, 170, 166, 255) # 粉嫩内耳
-COLOR_EYE = (58, 36, 26, 255)          # 深棕黑大猫眼
-COLOR_EYE_HIGHLIGHT = (255, 255, 255, 255) # 眼睛高光
-COLOR_NOSE = (255, 143, 163, 255)      # 粉色鼻头
-COLOR_OUTLINE = (180, 80, 20, 255)     # 柔和深色外轮廓线
+# 统一原创暖金橘白萌系桌宠猫配色方案
+COLOR_MAIN = (255, 155, 55, 255)       # 暖金橙背毛
+COLOR_MAIN_DARK = (210, 100, 20, 255)  # 阴影与背部虎斑
+COLOR_BELLY = (255, 250, 242, 255)     # 软萌雪白肚皮与爪套
+COLOR_EAR_INNER = (255, 175, 170, 255) # 粉嫩内耳
+COLOR_EYE = (40, 24, 18, 255)          # 水灵大杏眼
+COLOR_EYE_HIGHLIGHT = (255, 255, 255, 255) # 眼睛双高光
+COLOR_NOSE = (255, 135, 155, 255)      # 粉嘟嘟小鼻子
+COLOR_OUTLINE = (165, 70, 15, 255)     # 柔和深色外轮廓线
+COLOR_WHISKER = (140, 60, 15, 200)     # 灵动胡须线
 
 def create_base_canvas():
-    # 4倍超采样以获得最佳边缘平滑度
     scale = 4
     im = Image.new("RGBA", (CANVAS_SIZE[0] * scale, CANVAS_SIZE[1] * scale), (0, 0, 0, 0))
     draw = ImageDraw.Draw(im)
@@ -28,282 +28,292 @@ def downsample_and_save(im, filename):
     final_im.save(filepath, "PNG")
     print(f"[Art] Generated: {filename}")
 
-def draw_cat_head(draw, s, cx, cy, eye_open=1.0, look_dir=(0, 0)):
-    # 头部底色与轮廓 (圆润饱满的大猫头)
-    r = 13 * s
-    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-    # 双耳
-    draw.polygon([(cx - 10 * s, cy - 8 * s), (cx - 13 * s, cy - 20 * s), (cx - 3 * s, cy - 12 * s)], fill=COLOR_MAIN, outline=COLOR_OUTLINE)
-    draw.polygon([(cx - 9 * s, cy - 9 * s), (cx - 12 * s, cy - 18 * s), (cx - 4 * s, cy - 12 * s)], fill=COLOR_EAR_INNER)
-    draw.polygon([(cx + 10 * s, cy - 8 * s), (cx + 13 * s, cy - 20 * s), (cx + 3 * s, cy - 12 * s)], fill=COLOR_MAIN, outline=COLOR_OUTLINE)
-    draw.polygon([(cx + 9 * s, cy - 9 * s), (cx + 12 * s, cy - 18 * s), (cx + 4 * s, cy - 12 * s)], fill=COLOR_EAR_INNER)
-    # 面颊白毛包
-    draw.ellipse([cx - 9 * s, cy + 1 * s, cx + 9 * s, cy + 11 * s], fill=COLOR_BELLY)
-    # 粉色小鼻子
-    draw.polygon([(cx - 2 * s, cy + 3 * s), (cx + 2 * s, cy + 3 * s), (cx, cy + 5 * s)], fill=COLOR_NOSE)
-    # 大眼睛
-    er_x = 3.2 * s
-    er_y = 4.0 * s * eye_open
-    if eye_open > 0.2:
-        draw.ellipse([cx - 7 * s - er_x + look_dir[0] * s, cy - 1 * s - er_y + look_dir[1] * s, cx - 7 * s + er_x + look_dir[0] * s, cy - 1 * s + er_y + look_dir[1] * s], fill=COLOR_EYE)
-        draw.ellipse([cx + 7 * s - er_x + look_dir[0] * s, cy - 1 * s - er_y + look_dir[1] * s, cx + 7 * s + er_x + look_dir[0] * s, cy - 1 * s + er_y + look_dir[1] * s], fill=COLOR_EYE)
-        # 高光
-        draw.ellipse([cx - 8 * s + look_dir[0] * s, cy - 3 * s + look_dir[1] * s, cx - 6 * s + look_dir[0] * s, cy - 1 * s + look_dir[1] * s], fill=COLOR_EYE_HIGHLIGHT)
-        draw.ellipse([cx + 6 * s + look_dir[0] * s, cy - 3 * s + look_dir[1] * s, cx + 8 * s + look_dir[0] * s, cy - 1 * s + look_dir[1] * s], fill=COLOR_EYE_HIGHLIGHT)
-    else:
-        # 眯眼/闭眼弧线
-        draw.arc([cx - 9 * s, cy - 2 * s, cx - 4 * s, cy + 2 * s], 0, 180, fill=COLOR_EYE, width=max(1, int(1.5 * s)))
-        draw.arc([cx + 4 * s, cy - 2 * s, cx + 9 * s, cy + 2 * s], 0, 180, fill=COLOR_EYE, width=max(1, int(1.5 * s)))
-
 def draw_cat_tail(draw, s, root_x, root_y, angle_deg, length=18, curve=0.0):
+    rx, ry = root_x * s, root_y * s
     rad = math.radians(angle_deg)
-    mid_x = root_x + math.cos(rad) * (length * 0.5 * s)
-    mid_y = root_y - math.sin(rad) * (length * 0.5 * s) + curve * s
-    end_x = root_x + math.cos(rad + 0.3) * (length * s)
-    end_y = root_y - math.sin(rad + 0.3) * (length * s) + curve * 2 * s
-    draw.line([(root_x, root_y), (mid_x, mid_y), (end_x, end_y)], fill=COLOR_MAIN, width=max(1, int(3.6 * s)), joint="curve")
-def draw_cat_body_grounded(draw, s, bx, by, bw, bh, leg_phases, foot_y=58):
-    # 躯干 (圆润椭圆)
-    draw.ellipse([bx - bw * s, by - bh * s, bx + bw * s, by + bh * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-    # 腹部白毛
-    draw.ellipse([bx - bw * 0.65 * s, by - bh * 0.2 * s, bx + bw * 0.65 * s, by + bh * 0.9 * s], fill=COLOR_BELLY)
-    # 背部虎斑纹
-    draw.line([(bx - 3 * s, by - bh * s + 2 * s), (bx - 3 * s, by - bh * 0.4 * s)], fill=COLOR_MAIN_DARK, width=max(1, int(1.5 * s)))
-    draw.line([(bx + 3 * s, by - bh * s + 2 * s), (bx + 3 * s, by - bh * 0.4 * s)], fill=COLOR_MAIN_DARK, width=max(1, int(1.5 * s)))
-    # 四足绘制与 Foot Lock 对齐 (leg_phases 控制四腿前后摆动)
-    # leg_phases: [fl_off_x, fr_off_x, bl_off_x, br_off_x]
-    foot_r = 3.2 * s
-    # 后左、后右 (深色/在后)
-    for lx_ratio, off_x in [(-0.55, leg_phases[2]), (0.1, leg_phases[3])]:
-        lx = bx + lx_ratio * bw * s + off_x * s
-        ly = foot_y * s - foot_r
-        draw.ellipse([lx - foot_r, ly - foot_r * 1.5, lx + foot_r, ly + foot_r], fill=COLOR_MAIN_DARK)
-        draw.ellipse([lx - foot_r * 0.8, ly + foot_r * 0.2, lx + foot_r * 0.8, ly + foot_r], fill=COLOR_BELLY)
-    # 前左、前右 (在前)
-    for lx_ratio, off_x in [(-0.2, leg_phases[0]), (0.55, leg_phases[1])]:
-        lx = bx + lx_ratio * bw * s + off_x * s
-        ly = foot_y * s - foot_r
-        draw.ellipse([lx - foot_r, ly - foot_r * 1.8, lx + foot_r, ly + foot_r], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.0 * s)))
-        draw.ellipse([lx - foot_r * 0.8, ly + foot_r * 0.2, lx + foot_r * 0.8, ly + foot_r], fill=COLOR_BELLY)
+    mid_x = rx + math.cos(rad) * (length * 0.5 * s)
+    mid_y = ry - math.sin(rad) * (length * 0.5 * s) + curve * s
+    end_x = rx + math.cos(rad + 0.3) * (length * s)
+    end_y = ry - math.sin(rad + 0.3) * (length * s) + curve * 2 * s
+    draw.line([(rx, ry), (mid_x, mid_y), (end_x, end_y)], fill=COLOR_MAIN, width=max(2, int(4.0 * s)), joint="curve")
+    draw.ellipse([end_x - 2.0 * s, end_y - 2.0 * s, end_x + 2.0 * s, end_y + 2.0 * s], fill=COLOR_MAIN_DARK)
+
+def draw_cat_head(draw, s, cx_log, cy_log, eye_open=1.0, look_dir=(0, 0)):
+    cx, cy = cx_log * s, cy_log * s
+    r = 13.0 * s
+    # 头部底色与轮廓 (圆润饱满的大猫脸)
+    draw.ellipse([cx - r, cy - r * 0.95, cx + r, cy + r * 0.95], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+    # 双耳
+    draw.polygon([(cx - 10.5 * s, cy - 6 * s), (cx - 13.5 * s, cy - 19 * s), (cx - 3.5 * s, cy - 11 * s)], fill=COLOR_MAIN, outline=COLOR_OUTLINE)
+    draw.polygon([(cx - 9.5 * s, cy - 7 * s), (cx - 12.5 * s, cy - 17 * s), (cx - 4.5 * s, cy - 11 * s)], fill=COLOR_EAR_INNER)
+    draw.polygon([(cx + 10.5 * s, cy - 6 * s), (cx + 13.5 * s, cy - 19 * s), (cx + 3.5 * s, cy - 11 * s)], fill=COLOR_MAIN, outline=COLOR_OUTLINE)
+    draw.polygon([(cx + 9.5 * s, cy - 7 * s), (cx + 12.5 * s, cy - 17 * s), (cx + 4.5 * s, cy - 11 * s)], fill=COLOR_EAR_INNER)
+    # 面颊白毛包 (饱满白嘴套)
+    draw.ellipse([cx - 9.5 * s, cy + 0.5 * s, cx + 9.5 * s, cy + 10.5 * s], fill=COLOR_BELLY)
+    # 左右胡须
+    for sign in [-1, 1]:
+        wx = cx + sign * 9.0 * s
+        draw.line([(wx, cy + 4.0 * s), (wx + sign * 6.0 * s, cy + 2.5 * s)], fill=COLOR_WHISKER, width=max(1, int(0.8 * s)))
+        draw.line([(wx, cy + 6.5 * s), (wx + sign * 6.0 * s, cy + 7.5 * s)], fill=COLOR_WHISKER, width=max(1, int(0.8 * s)))
+    # 小粉鼻
+    draw.polygon([(cx - 1.8 * s, cy + 3.0 * s), (cx + 1.8 * s, cy + 3.0 * s), (cx, cy + 5.0 * s)], fill=COLOR_NOSE)
+    # 大眼睛与双高光
+    er_x, er_y = 3.2 * s, 4.0 * s * eye_open
+    if eye_open > 0.2:
+        for ex_sign in [-1, 1]:
+            ex = cx + ex_sign * 6.5 * s + look_dir[0] * s
+            ey = cy - 1.2 * s + look_dir[1] * s
+            draw.ellipse([ex - er_x, ey - er_y, ex + er_x, ey + er_y], fill=COLOR_EYE)
+            draw.ellipse([ex - 1.8 * s, ey - 2.8 * s, ex + 0.5 * s, ey - 0.5 * s], fill=COLOR_EYE_HIGHLIGHT)
+            draw.ellipse([ex + 0.8 * s, ey + 0.8 * s, ex + 2.0 * s, ey + 2.0 * s], fill=COLOR_EYE_HIGHLIGHT)
+    else:
+        for ex_sign in [-1, 1]:
+            ex = cx + ex_sign * 6.5 * s
+            draw.arc([ex - 4 * s, cy - 2 * s, ex + 4 * s, cy + 3 * s], 10, 170, fill=COLOR_EYE, width=max(1, int(1.5 * s)))
+
+def draw_cat_body_grounded(draw, s, bx_log, by_log, bw_log, bh_log, leg_phases, foot_y_log=58):
+    bx, by = bx_log * s, by_log * s
+    bw, bh = bw_log * s, bh_log * s
+    foot_y = foot_y_log * s
+    foot_r = 3.6 * s
+
+    # 1. 远侧双腿 (左侧后腿与右侧前腿在深层)
+    # 远侧后腿 (X 约 20)
+    bl_x = bx - bw * 0.55 + leg_phases[2] * s
+    draw.ellipse([bl_x - foot_r, foot_y - foot_r * 2.2, bl_x + foot_r, foot_y], fill=COLOR_MAIN_DARK)
+    draw.ellipse([bl_x - foot_r * 0.9, foot_y - foot_r * 0.9, bl_x + foot_r * 0.9, foot_y], fill=COLOR_BELLY)
+    # 远侧前腿 (X 约 36)
+    fl_x = bx + bw * 0.45 + leg_phases[0] * s
+    draw.ellipse([fl_x - foot_r, foot_y - foot_r * 2.4, fl_x + foot_r, foot_y], fill=COLOR_MAIN_DARK)
+    draw.ellipse([fl_x - foot_r * 0.9, foot_y - foot_r * 0.9, fl_x + foot_r * 0.9, foot_y], fill=COLOR_BELLY)
+
+    # 2. 躯干主椭圆 (圆润身体)
+    draw.ellipse([bx - bw, by - bh, bx + bw, by + bh], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+    # 雪白大肚皮 (贴在胸腹前下方)
+    draw.ellipse([bx - bw * 0.35, by - bh * 0.1, bx + bw * 0.85, by + bh * 0.95], fill=COLOR_BELLY)
+    # 背部柔和虎斑纹
+    draw.line([(bx - 5 * s, by - bh + 2 * s), (bx - 5 * s, by - bh * 0.25)], fill=COLOR_MAIN_DARK, width=max(1, int(1.6 * s)))
+    draw.line([(bx + 2 * s, by - bh + 2 * s), (bx + 2 * s, by - bh * 0.25)], fill=COLOR_MAIN_DARK, width=max(1, int(1.6 * s)))
+
+    # 3. 近侧双腿 (处于前景浅层)
+    # 近侧后腿 (饱满后大腿肉包 + 白爪)
+    br_x = bx - bw * 0.4 + leg_phases[3] * s
+    draw.ellipse([br_x - foot_r * 1.3, foot_y - foot_r * 3.0, br_x + foot_r * 1.3, foot_y], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.0 * s)))
+    draw.ellipse([br_x - foot_r * 0.9, foot_y - foot_r * 1.0, br_x + foot_r * 0.9, foot_y], fill=COLOR_BELLY)
+    # 近侧前腿 (挺拔前肢 + 白爪)
+    fr_x = bx + bw * 0.7 + leg_phases[1] * s
+    draw.ellipse([fr_x - foot_r, foot_y - foot_r * 2.6, fr_x + foot_r, foot_y], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.0 * s)))
+    draw.ellipse([fr_x - foot_r * 0.9, foot_y - foot_r * 1.0, fr_x + foot_r * 0.9, foot_y], fill=COLOR_BELLY)
 
 def generate_idle():
     for f in range(6):
         im, draw, s = create_base_canvas()
-        breath_y = math.sin(f * math.pi / 3.0) * 0.8
+        breath_y = math.sin(f * math.pi / 3.0) * 0.6
         tail_ang = 45 + math.sin(f * math.pi / 3.0) * 12
         eye_open = 0.0 if f == 4 else 1.0 # 偶尔眨眼
-        # 躯干 (bx=30, by=40+breath_y)
-        draw_cat_tail(draw, s, 18 * s, (44 + breath_y) * s, tail_ang, curve=-2)
-        draw_cat_body_grounded(draw, s, 30, 41 + breath_y, 14, 11, [0, 0, 0, 0], foot_y=58)
-        draw_cat_head(draw, s, 42 * s, (29 + breath_y) * s, eye_open=eye_open)
+        draw_cat_tail(draw, s, 15, 43 + breath_y, tail_ang, length=18, curve=-2)
+        draw_cat_body_grounded(draw, s, 26, 42 + breath_y, 14, 11, [0, 0, 0, 0], foot_y_log=58)
+        draw_cat_head(draw, s, 38, 28 + breath_y, eye_open=eye_open)
         downsample_and_save(im, f"idle_{f+1:02d}.png")
 
 def generate_walk():
     for f in range(6):
         im, draw, s = create_base_canvas()
         t = f * math.pi / 3.0
-        bob_y = abs(math.sin(t)) * 1.5
+        bob_y = abs(math.sin(t)) * 1.2
         tail_ang = 40 + math.sin(t) * 15
         leg_phases = [math.sin(t) * 3.5, -math.sin(t) * 3.5, -math.sin(t) * 3.0, math.sin(t) * 3.0]
-        draw_cat_tail(draw, s, 18 * s, (43 - bob_y) * s, tail_ang, curve=1)
-        draw_cat_body_grounded(draw, s, 30, 40 - bob_y, 14, 10.5, leg_phases, foot_y=58)
-        draw_cat_head(draw, s, 43 * s, (29 - bob_y * 1.2) * s, eye_open=1.0)
+        draw_cat_tail(draw, s, 15, 42 - bob_y, tail_ang, length=18, curve=1)
+        draw_cat_body_grounded(draw, s, 26, 41 - bob_y, 14, 11, leg_phases, foot_y_log=58)
+        draw_cat_head(draw, s, 38, 28 - bob_y * 1.1, eye_open=1.0)
         downsample_and_save(im, f"walk_{f+1:02d}.png")
 
 def generate_run():
     for f in range(6):
         im, draw, s = create_base_canvas()
         t = f * math.pi / 3.0
-        bob_y = abs(math.sin(t)) * 2.5
-        tail_ang = 15 + math.sin(t) * 20 # 压低尾巴冲刺
-        # 大步张开
+        bob_y = abs(math.sin(t)) * 2.0
+        tail_ang = 18 + math.sin(t) * 20
         leg_phases = [math.sin(t) * 6.5, -math.sin(t) * 6.5, -math.sin(t) * 6.0, math.sin(t) * 6.0]
-        draw_cat_tail(draw, s, 16 * s, (44 - bob_y) * s, tail_ang, length=20, curve=-3)
-        draw_cat_body_grounded(draw, s, 30, 42 - bob_y, 16, 9.5, leg_phases, foot_y=58)
-        draw_cat_head(draw, s, 45 * s, (31 - bob_y * 0.8) * s, eye_open=1.0, look_dir=(1.5, 0))
+        draw_cat_tail(draw, s, 14, 43 - bob_y, tail_ang, length=20, curve=-3)
+        draw_cat_body_grounded(draw, s, 26, 42 - bob_y, 16, 10, leg_phases, foot_y_log=58)
+        draw_cat_head(draw, s, 40, 29 - bob_y * 0.8, eye_open=1.0, look_dir=(1.5, 0))
         downsample_and_save(im, f"run_{f+1:02d}.png")
 
 def generate_sit():
     for f in range(4):
         im, draw, s = create_base_canvas()
         breath_y = math.sin(f * math.pi / 2.0) * 0.5
-        tail_ang = 10 + math.sin(f * math.pi / 2.0) * 5
-        # 坐姿：身体直立收缩
-        draw_cat_tail(draw, s, 20 * s, 54 * s, tail_ang, length=16, curve=4)
-        draw.ellipse([(32 - 13) * s, (45 + breath_y) * s, (32 + 13) * s, 58 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-        draw.ellipse([(32 - 7) * s, (48 + breath_y) * s, (32 + 7) * s, 58 * s], fill=COLOR_BELLY)
-        # 两只端正前爪
-        for px in [27, 37]:
-            draw.ellipse([(px - 3) * s, 54 * s, (px + 3) * s, 58 * s], fill=COLOR_BELLY, outline=COLOR_OUTLINE, width=max(1, int(1.0 * s)))
-        draw_cat_head(draw, s, 32 * s, (30 + breath_y) * s, eye_open=1.0)
+        tail_ang = 15 + math.sin(f * math.pi / 2.0) * 6
+        draw_cat_tail(draw, s, 18, 52 + breath_y, tail_ang, length=16, curve=4)
+        # 坐姿端正躯干 (底部宽圆，收腹胸脯挺立)
+        draw.ellipse([(32 - 13.5) * s, (38 + breath_y) * s, (32 + 13.5) * s, 57 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+        # 雪白前胸大肚皮
+        draw.ellipse([(32 - 7.5) * s, (41 + breath_y) * s, (32 + 7.5) * s, 56 * s], fill=COLOR_BELLY)
+        # 两侧后腿大腿包
+        draw.ellipse([(20 - 4) * s, (49 + breath_y) * s, (20 + 4) * s, 57 * s], fill=COLOR_MAIN_DARK)
+        draw.ellipse([(44 - 4) * s, (49 + breath_y) * s, (44 + 4) * s, 57 * s], fill=COLOR_MAIN_DARK)
+        # 两只端正前爪踩在 Y=58
+        for px in [27.5, 36.5]:
+            draw.ellipse([(px - 3.2) * s, 52 * s, (px + 3.2) * s, 58 * s], fill=COLOR_BELLY, outline=COLOR_OUTLINE, width=max(1, int(1.0 * s)))
+        draw_cat_head(draw, s, 32, 25 + breath_y, eye_open=1.0)
         downsample_and_save(im, f"sit_{f+1:02d}.png")
 
 def generate_sleep():
     for f in range(4):
         im, draw, s = create_base_canvas()
-        breath = math.sin(f * math.pi / 2.0) * 1.0
-        # 蜷缩团子
-        draw.ellipse([(32 - 17) * s, (46 - breath * 0.5) * s, (32 + 17) * s, 58 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-        draw_cat_tail(draw, s, 44 * s, 53 * s, 175, length=18, curve=6)
-        # 头部靠在身体边
-        draw_cat_head(draw, s, 22 * s, 47 * s, eye_open=0.0)
+        breath = math.sin(f * math.pi / 2.0) * 0.8
+        # 温暖圆润橘猫团子 (大椭圆)
+        draw.ellipse([(32 - 17) * s, (36 - breath * 0.4) * s, (32 + 17) * s, 58 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+        draw.ellipse([(32 - 10) * s, (44 - breath * 0.4) * s, (32 + 10) * s, 57 * s], fill=COLOR_BELLY)
+        # 尾巴裹在身侧
+        draw_cat_tail(draw, s, 45, 50, 160, length=22, curve=7)
+        # 头部侧靠在身前 (闭目沉睡)
+        draw_cat_head(draw, s, 24, 43 - breath * 0.3, eye_open=0.0)
         downsample_and_save(im, f"sleep_{f+1:02d}.png")
 
 def generate_wake():
     for f in range(4):
         im, draw, s = create_base_canvas()
-        # 伸懒腰拱背打哈欠
-        arch_y = (1.0 - f / 3.0) * 4.0
-        eye = 0.3 if f < 2 else 1.0
-        draw_cat_tail(draw, s, 16 * s, (46 - arch_y) * s, 60 + f * 10, length=18)
-        draw.ellipse([(32 - 14) * s, (42 - arch_y) * s, (32 + 14) * s, 58 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-        # 前足伸展
-        for px in [34 + f * 2, 40 + f * 2]:
-            draw.ellipse([(px - 3) * s, 54 * s, (px + 3) * s, 58 * s], fill=COLOR_BELLY)
-        draw_cat_head(draw, s, 42 * s, (32 - arch_y * 0.5) * s, eye_open=eye)
+        arch_y = (1.0 - f / 3.0) * 3.5
+        eye = 0.4 if f < 2 else 1.0
+        draw_cat_tail(draw, s, 15, 43 - arch_y, 45 + f * 15, length=18)
+        # 拱背伸懒腰
+        draw.ellipse([(28 - 14) * s, (39 - arch_y) * s, (28 + 14) * s, 58 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+        draw.ellipse([(28 - 7) * s, (44 - arch_y) * s, (28 + 7) * s, 58 * s], fill=COLOR_BELLY)
+        for px in [33 + f * 2, 39 + f * 2]:
+            draw.ellipse([(px - 3) * s, 53 * s, (px + 3) * s, 58 * s], fill=COLOR_BELLY)
+        draw_cat_head(draw, s, 40, 29 - arch_y * 0.5, eye_open=eye)
         downsample_and_save(im, f"wake_{f+1:02d}.png")
 
 def generate_jump():
     for f in range(4):
         im, draw, s = create_base_canvas()
-        # 身体向上倾斜蹬起
         rot_y = (f / 3.0) * 4.0
-        draw_cat_tail(draw, s, 16 * s, (45 + rot_y) * s, 10, length=18)
-        draw.ellipse([(32 - 12) * s, (34 - rot_y) * s, (32 + 12) * s, (50 - rot_y) * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-        # 四足收缩向上
-        for px, py in [(26, 50 - rot_y), (38, 48 - rot_y)]:
-            draw.ellipse([(px - 3) * s, py * s, (px + 3) * s, (py + 4) * s], fill=COLOR_BELLY)
-        draw_cat_head(draw, s, 42 * s, (24 - rot_y) * s, eye_open=1.0, look_dir=(1.0, -1.0))
+        draw_cat_tail(draw, s, 13, 46 - rot_y, 25, length=20, curve=-4)
+        draw.ellipse([(28 - 15) * s, (39 - rot_y) * s, (28 + 15) * s, (53 - rot_y) * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+        draw.ellipse([(28 - 7) * s, (42 - rot_y) * s, (28 + 7) * s, (52 - rot_y) * s], fill=COLOR_BELLY)
+        # 前探双爪，后蹬双腿
+        draw.ellipse([(43 - 3.5) * s, (42 - rot_y) * s, (43 + 3.5) * s, (48 - rot_y) * s], fill=COLOR_BELLY)
+        draw.ellipse([(13 - 3.5) * s, (48 - rot_y) * s, (13 + 3.5) * s, (54 - rot_y) * s], fill=COLOR_BELLY)
+        draw_cat_head(draw, s, 41, 26 - rot_y * 1.1, eye_open=1.0)
         downsample_and_save(im, f"jump_{f+1:02d}.png")
 
 def generate_fall():
     for f in range(4):
         im, draw, s = create_base_canvas()
-        # 身体前倾下倾，四足微张准备缓冲
-        bob = math.sin(f * math.pi / 2.0) * 1.5
-        draw_cat_tail(draw, s, 18 * s, (38 + bob) * s, 70, length=20)
-        draw.ellipse([(32 - 13) * s, (36 + bob) * s, (32 + 13) * s, (51 + bob) * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-        for px, py in [(24, 52 + bob), (40, 52 + bob)]:
-            draw.ellipse([(px - 3.5) * s, py * s, (px + 3.5) * s, (py + 5) * s], fill=COLOR_BELLY)
-        draw_cat_head(draw, s, 40 * s, (27 + bob) * s, eye_open=1.0, look_dir=(0.5, 1.0))
+        tail_ang = 60 + math.sin(f * math.pi) * 10
+        draw_cat_tail(draw, s, 15, 37, tail_ang, length=18, curve=-2)
+        draw.ellipse([(29 - 14) * s, 34 * s, (29 + 14) * s, 50 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+        draw.ellipse([(29 - 7) * s, 38 * s, (29 + 7) * s, 49 * s], fill=COLOR_BELLY)
+        for px, py in [(17, 52), (23, 54), (39, 54), (45, 52)]:
+            draw.ellipse([(px - 3) * s, (py - 3) * s, (px + 3) * s, (py + 3) * s], fill=COLOR_BELLY)
+        draw_cat_head(draw, s, 40, 27, eye_open=1.0)
         downsample_and_save(im, f"fall_{f+1:02d}.png")
 
 def generate_land():
-    # 落地缓冲三帧：深屈 -> 回弹 -> 恢复
-    squashes = [6.0, 3.0, 0.0]
     for f in range(3):
         im, draw, s = create_base_canvas()
-        sq = squashes[f]
-        draw_cat_tail(draw, s, 18 * s, (46 + sq * 0.5) * s, 35, length=18)
-        # 身体横向变宽，纵向变扁
-        draw.ellipse([(30 - (15 + sq * 0.5)) * s, (44 + sq) * s, (30 + (15 + sq * 0.5)) * s, 58 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-        # 四足贴地
-        for px in [20, 28, 36, 44]:
-            draw.ellipse([(px - 3) * s, 54 * s, (px + 3) * s, 58 * s], fill=COLOR_BELLY)
-        draw_cat_head(draw, s, 42 * s, (32 + sq * 0.8) * s, eye_open=1.0)
+        squish = (2 - f) * 2.5
+        draw_cat_tail(draw, s, 15, 47 + squish, 30, length=16)
+        # 落地压扁屈膝 (四足锁紧 Y=58)
+        draw.ellipse([(30 - (15 + squish)) * s, (44 + squish * 0.5) * s, (30 + (15 + squish)) * s, 58 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+        draw.ellipse([(30 - 8) * s, (47 + squish * 0.5) * s, (30 + 8) * s, 58 * s], fill=COLOR_BELLY)
+        for px in [17 - squish, 25, 36, 44 + squish]:
+            draw.ellipse([(px - 3.5) * s, 53 * s, (px + 3.5) * s, 58 * s], fill=COLOR_BELLY)
+        draw_cat_head(draw, s, 37, 32 + squish * 0.8, eye_open=1.0)
         downsample_and_save(im, f"land_{f+1:02d}.png")
 
 def generate_dragged():
     for f in range(4):
         im, draw, s = create_base_canvas()
-        sway = math.sin(f * math.pi / 2.0) * 1.5
-        # 身体悬挂下垂
-        draw_cat_tail(draw, s, (30 + sway * 0.5) * s, 48 * s, 260 + sway * 8, length=18)
-        draw.ellipse([(30 - 11 + sway) * s, 28 * s, (30 + 11 + sway) * s, 52 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-        # 四足自然下垂
-        for px, py in [(24, 52), (36, 52)]:
-            draw.ellipse([(px - 2.5 + sway) * s, py * s, (px + 2.5 + sway) * s, (py + 6) * s], fill=COLOR_BELLY)
-        draw_cat_head(draw, s, (30 + sway) * s, 20 * s, eye_open=1.0, look_dir=(0, 1.0))
+        sway = math.sin(f * math.pi / 2.0) * 2.0
+        draw_cat_tail(draw, s, 32 + sway * 0.5, 47, -80, length=18)
+        draw.ellipse([(32 - 11 + sway * 0.5) * s, 26 * s, (32 + 11 + sway * 0.5) * s, 50 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+        draw.ellipse([(32 - 6 + sway * 0.5) * s, 29 * s, (32 + 6 + sway * 0.5) * s, 48 * s], fill=COLOR_BELLY)
+        for px, py in [(24, 52), (28, 54), (36, 54), (40, 52)]:
+            draw.ellipse([(px - 3 + sway) * s, py * s, (px + 3 + sway) * s, (py + 5) * s], fill=COLOR_BELLY)
+        draw_cat_head(draw, s, 32 + sway * 0.3, 20, eye_open=1.0)
         downsample_and_save(im, f"dragged_{f+1:02d}.png")
 
 def generate_edge_grab():
     for f in range(3):
         im, draw, s = create_base_canvas()
-        # 空中前爪探出抓向右侧平台边缘 (46, 38)
-        draw_cat_tail(draw, s, 20 * s, 46 * s, 210, length=16)
-        draw.ellipse([(30 - 11) * s, 34 * s, (30 + 11) * s, 52 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-        # 双前爪伸向 (46, 38)
-        paw_x = 42 + f * 2
-        draw.ellipse([(paw_x - 3) * s, 36 * s, (paw_x + 3) * s, 40 * s], fill=COLOR_BELLY, outline=COLOR_OUTLINE)
-        draw_cat_head(draw, s, 38 * s, 26 * s, eye_open=1.0, look_dir=(1.0, 0))
+        stretch = f * 1.5
+        draw_cat_tail(draw, s, 24, 46 + stretch, -40, length=16)
+        draw.ellipse([(32 - 12) * s, (34 + stretch) * s, (32 + 12) * s, (52 + stretch) * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+        draw.ellipse([(32 - 6) * s, (36 + stretch) * s, (32 + 6) * s, (50 + stretch) * s], fill=COLOR_BELLY)
+        draw.ellipse([43 * s, 35 * s, 49 * s, 41 * s], fill=COLOR_BELLY, outline=COLOR_OUTLINE, width=max(1, int(1.0 * s)))
+        draw_cat_head(draw, s, 36, 25 + stretch, eye_open=1.0)
         downsample_and_save(im, f"edge_grab_{f+1:02d}.png")
 
 def generate_edge_hang():
     for f in range(4):
         im, draw, s = create_base_canvas()
-        sway = math.sin(f * math.pi / 2.0) * 1.0
-        # 双前爪精准扣住平台边缘 (46, 38)
-        draw.ellipse([(46 - 4) * s, 36 * s, (46 + 4) * s, 40 * s], fill=COLOR_BELLY, outline=COLOR_OUTLINE, width=max(1, int(1.0 * s)))
-        # 身体下垂并在风中微晃
-        draw_cat_tail(draw, s, (34 + sway) * s, 54 * s, 240 + sway * 10, length=16)
-        draw.ellipse([(34 - 10 + sway) * s, 38 * s, (34 + 10 + sway) * s, 58 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-        draw_cat_head(draw, s, (38 + sway * 0.5) * s, 28 * s, eye_open=1.0)
+        sway = math.sin(f * math.pi / 2.0) * 1.2
+        draw_cat_tail(draw, s, 26 + sway * 0.5, 50, -50, length=16, curve=3)
+        draw.ellipse([(33 - 11 + sway * 0.5) * s, 34 * s, (33 + 11 + sway * 0.5) * s, 54 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+        draw.ellipse([(33 - 6 + sway * 0.5) * s, 36 * s, (33 + 6 + sway * 0.5) * s, 52 * s], fill=COLOR_BELLY)
+        draw.ellipse([43 * s, 35 * s, 49 * s, 41 * s], fill=COLOR_BELLY, outline=COLOR_OUTLINE, width=max(1, int(1.0 * s)))
+        draw.ellipse([(31 - 4 + sway) * s, 53 * s, (31 + 4 + sway) * s, 59 * s], fill=COLOR_BELLY)
+        draw_cat_head(draw, s, 37 + sway * 0.3, 24, eye_open=1.0)
         downsample_and_save(im, f"edge_hang_{f+1:02d}.png")
 
 def generate_climb_up():
-    # 6帧两段式翻越: PULL_UP (1-2) -> SHIFT_IN (3-4) -> SETTLE (5-6)
     for f in range(6):
         im, draw, s = create_base_canvas()
-        progress = f / 5.0
-        # 整体重心从边缘下方 (34, 48) 平滑向上向前移动到平台表面 (30, 41)
-        bx = 36 - progress * 6.0
-        by = 52 - progress * 11.0
-        tail_ang = 220 - progress * 160 # 尾巴从下垂转为向后自然扬起
-        draw_cat_tail(draw, s, (bx - 10) * s, (by + 4) * s, tail_ang, length=16)
-        draw.ellipse([(bx - 12) * s, (by - 9) * s, (bx + 12) * s, (by + 9) * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-        # 双爪用力撑平台
-        paw_y = 38 if f < 4 else (by + 8)
-        for px in [bx + 2, bx + 8]:
-            draw.ellipse([(px - 3) * s, paw_y * s, (px + 3) * s, (paw_y + 4) * s], fill=COLOR_BELLY)
-        draw_cat_head(draw, s, (bx + 10) * s, (by - 8) * s, eye_open=1.0)
+        p = f / 5.0
+        up_y = p * 14.0
+        shift_x = p * 6.0
+        draw_cat_tail(draw, s, 22 - p * 6, 48 - up_y, -30 + p * 65, length=17)
+        draw.ellipse([(30 + shift_x - 13) * s, (38 - up_y) * s, (30 + shift_x + 13) * s, (54 - up_y) * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+        draw.ellipse([(30 + shift_x - 7) * s, (40 - up_y) * s, (30 + shift_x + 7) * s, (52 - up_y) * s], fill=COLOR_BELLY)
+        draw.ellipse([(43 + shift_x) * s, (36 - up_y) * s, (49 + shift_x) * s, (42 - up_y) * s], fill=COLOR_BELLY)
+        draw.ellipse([(20 + shift_x) * s, (50 - up_y) * s, (26 + shift_x) * s, (56 - up_y) * s], fill=COLOR_BELLY)
+        draw_cat_head(draw, s, 38 + shift_x, 26 - up_y, eye_open=1.0)
         downsample_and_save(im, f"climb_up_{f+1:02d}.png")
 
 def generate_wall_cling():
     for f in range(4):
         im, draw, s = create_base_canvas()
         breath = math.sin(f * math.pi / 2.0) * 0.8
-        # 面向右侧墙壁，四足抓附墙体 (x=48)
-        draw_cat_tail(draw, s, 26 * s, (44 + breath) * s, 230, length=16)
-        draw.ellipse([(34 - 10) * s, (38 + breath) * s, (34 + 10) * s, (52 + breath) * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-        # 四足贴右墙 (x=48)
-        for py in [36 + breath, 42 + breath, 48 + breath, 52 + breath]:
-            draw.ellipse([45 * s, (py - 2.5) * s, 49 * s, (py + 2.5) * s], fill=COLOR_BELLY, outline=COLOR_OUTLINE)
-        draw_cat_head(draw, s, 38 * s, (28 + breath) * s, eye_open=1.0, look_dir=(1.0, 0))
+        draw_cat_tail(draw, s, 24, 46 + breath, -70, length=18, curve=-2)
+        draw.ellipse([(32 - 12) * s, (34 + breath) * s, (32 + 12) * s, (54 + breath) * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+        draw.ellipse([(32 - 6) * s, (37 + breath) * s, (32 + 6) * s, (52 + breath) * s], fill=COLOR_BELLY)
+        draw.ellipse([44 * s, (35 + breath) * s, 50 * s, (41 + breath) * s], fill=COLOR_BELLY, outline=COLOR_OUTLINE, width=max(1, int(1.0 * s)))
+        draw.ellipse([44 * s, (46 + breath) * s, 50 * s, (52 + breath) * s], fill=COLOR_BELLY, outline=COLOR_OUTLINE, width=max(1, int(1.0 * s)))
+        draw_cat_head(draw, s, 36, 24 + breath, eye_open=1.0)
         downsample_and_save(im, f"wall_cling_{f+1:02d}.png")
 
 def generate_wall_climb_up():
     for f in range(6):
         im, draw, s = create_base_canvas()
         t = f * math.pi / 3.0
-        bob_x = math.sin(t) * 1.0
-        # 向上爬行，爪子上下交替贴墙
-        draw_cat_tail(draw, s, (26 + bob_x) * s, 45 * s, 240 + math.sin(t) * 15, length=16)
-        draw.ellipse([(34 - 10 + bob_x) * s, 36 * s, (34 + 10 + bob_x) * s, 52 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-        paw_offs = [math.sin(t) * 4.0, -math.sin(t) * 4.0, -math.sin(t) * 3.5, math.sin(t) * 3.5]
-        for idx, base_y in enumerate([34, 40, 46, 52]):
-            py = base_y + paw_offs[idx]
-            draw.ellipse([45 * s, (py - 2.5) * s, 49 * s, (py + 2.5) * s], fill=COLOR_BELLY, outline=COLOR_OUTLINE)
-        draw_cat_head(draw, s, (38 + bob_x * 0.5) * s, 26 * s, eye_open=1.0, look_dir=(1.0, -1.0))
+        step = math.sin(t) * 3.5
+        draw_cat_tail(draw, s, 24, 46, -75 + step * 2, length=18)
+        draw.ellipse([(32 - 12) * s, 34 * s, (32 + 12) * s, 54 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+        draw.ellipse([(32 - 6) * s, 37 * s, (32 + 6) * s, 52 * s], fill=COLOR_BELLY)
+        draw.ellipse([44 * s, (33 - step) * s, 50 * s, (39 - step) * s], fill=COLOR_BELLY)
+        draw.ellipse([44 * s, (45 + step) * s, 50 * s, (51 + step) * s], fill=COLOR_BELLY)
+        draw_cat_head(draw, s, 36, 23 - abs(step) * 0.3, eye_open=1.0)
         downsample_and_save(im, f"wall_climb_up_{f+1:02d}.png")
 
 def generate_wall_climb_down():
     for f in range(6):
         im, draw, s = create_base_canvas()
         t = f * math.pi / 3.0
-        bob_x = math.sin(t) * 1.0
-        # 向下倒退爬行
-        draw_cat_tail(draw, s, (26 + bob_x) * s, 43 * s, 220 + math.sin(t) * 15, length=16)
-        draw.ellipse([(34 - 10 + bob_x) * s, 38 * s, (34 + 10 + bob_x) * s, 54 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
-        paw_offs = [-math.sin(t) * 4.0, math.sin(t) * 4.0, math.sin(t) * 3.5, -math.sin(t) * 3.5]
-        for idx, base_y in enumerate([36, 42, 48, 54]):
-            py = base_y + paw_offs[idx]
-            draw.ellipse([45 * s, (py - 2.5) * s, 49 * s, (py + 2.5) * s], fill=COLOR_BELLY, outline=COLOR_OUTLINE)
-        draw_cat_head(draw, s, (38 + bob_x * 0.5) * s, 29 * s, eye_open=1.0, look_dir=(0.8, 1.0))
+        step = math.sin(t) * 3.2
+        draw_cat_tail(draw, s, 24, 44, -50 + step * 2, length=18)
+        draw.ellipse([(32 - 12) * s, 35 * s, (32 + 12) * s, 55 * s], fill=COLOR_MAIN, outline=COLOR_OUTLINE, width=max(1, int(1.2 * s)))
+        draw.ellipse([(32 - 6) * s, 38 * s, (32 + 6) * s, 53 * s], fill=COLOR_BELLY)
+        draw.ellipse([44 * s, (37 + step) * s, 50 * s, (43 + step) * s], fill=COLOR_BELLY)
+        draw.ellipse([44 * s, (47 - step) * s, 50 * s, (53 - step) * s], fill=COLOR_BELLY)
+        draw_cat_head(draw, s, 36, 25 + abs(step) * 0.3, eye_open=1.0)
         downsample_and_save(im, f"wall_climb_down_{f+1:02d}.png")
 
 if __name__ == "__main__":
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    print("Generating full T24 original cat animation sprite suite...")
+    print("========== 开始生成高品质原创 16 组猫咪动画序列帧 ==========")
     generate_idle()
     generate_walk()
     generate_run()
@@ -320,4 +330,4 @@ if __name__ == "__main__":
     generate_wall_cling()
     generate_wall_climb_up()
     generate_wall_climb_down()
-    print("All 16 animation suites successfully generated!")
+    print("========== 全套 74 帧原创高精动画生成完毕 ==========")
