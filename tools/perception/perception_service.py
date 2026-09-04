@@ -6,7 +6,13 @@ DesktopCat - Unified Perception Runner (T14)
 
 import threading
 import time
+import os
 import sys
+
+# 动态确保项目根目录在 sys.path 中
+_ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _ROOT_DIR not in sys.path:
+    sys.path.insert(0, _ROOT_DIR)
 
 from tools.perception.window_perception import WindowPerceptionService
 from tools.perception.ui_automation_perception import UIAutomationPerceptionService

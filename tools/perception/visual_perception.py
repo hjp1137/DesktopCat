@@ -9,7 +9,12 @@ from ctypes import wintypes, c_void_p, POINTER, Structure, byref, WINFUNCTYPE, c
 import socket
 import json
 import time
+import os
 import sys
+
+_ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _ROOT_DIR not in sys.path:
+    sys.path.insert(0, _ROOT_DIR)
 
 try:
     import numpy as np

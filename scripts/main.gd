@@ -417,7 +417,7 @@ func _cleanup_perception_service() -> void:
 func _spawn_fallback_demo_surfaces() -> void:
 	if surface_world_model == null: return
 	# 若已经有外部窗口实体接入 (表面数量 > 4)，则无需注入演示平台
-	if surface_world_model.surfaces.size() > 4: return
+	if surface_world_model.surfaces_by_id.size() > 4: return
 	
 	var vp: Vector2 = Vector2(get_window().size) if get_window() else Vector2(1280, 720)
 	if vp.x <= 100 or vp.y <= 100: vp = Vector2(1920, 1080)
@@ -431,9 +431,10 @@ func _spawn_fallback_demo_surfaces() -> void:
 	var surf_left = SurfaceClass.new("demo:shelf:left", "demo", "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, shelf_x1, shelf_y, shelf_x1, shelf_y + 180.0, false, false, true)
 	var surf_right = SurfaceClass.new("demo:shelf:right", "demo", "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.RIGHT, shelf_x2, shelf_y, shelf_x2, shelf_y + 180.0, false, false, true)
 	
-	surface_world_model.add_surface(surf_top)
-	surface_world_model.add_surface(surf_left)
-	surface_world_model.add_surface(surf_right)
+	surface_world_model.surfaces_by_id[surf_top.id] = surf_top
+	surface_world_model.surfaces_by_id[surf_left.id] = surf_left
+	surface_world_model.surfaces_by_id[surf_right.id] = surf_right
+	surface_world_model.surface_revision += 1
 	surface_world_model.surface_world_updated.emit(surface_world_model.surface_revision)
 
 
