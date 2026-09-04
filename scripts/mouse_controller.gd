@@ -24,7 +24,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.pressed:
 			if is_instance_valid(cat):
 				var local_pos := cat.get_local_mouse_position()
-				if Rect2(-28, -28, 56, 56).has_point(local_pos):
+				var hit_w: float = 56.0
+				var hit_h: float = 56.0
+				if "metrics" in cat and cat.metrics != null:
+					hit_w = cat.metrics.hitbox_size.x
+					hit_h = cat.metrics.hitbox_size.y
+				var hit_rect := Rect2(-hit_w * 0.5, -hit_h, hit_w, hit_h)
+				if hit_rect.has_point(local_pos):
 					is_mouse_down = true
 					is_dragging = false
 					press_start_pos = event.position
@@ -38,6 +44,19 @@ func _unhandled_input(event: InputEvent) -> void:
 					cat._on_clicked()
 			is_mouse_down = false
 			is_dragging = false
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		if is_instance_valid(cat):
+			var local_pos := cat.get_local_mouse_position()
+			var hit_w: float = 56.0
+			var hit_h: float = 56.0
+			if "metrics" in cat and cat.metrics != null:
+				hit_w = cat.metrics.hitbox_size.x
+				hit_h = cat.metrics.hitbox_size.y
+			if Rect2(-hit_w * 0.5, -hit_h, hit_w, hit_h).has_point(local_pos):
+				if command_manager:
+					command_manager.send_command(CommandManager.CatCommand.SIT)
+				if cat.has_method("_on_clicked"):
+					cat._on_clicked()
 	elif event is InputEventMouseMotion and is_mouse_down:
 		_record_sample(event.position)
 		if not is_dragging:

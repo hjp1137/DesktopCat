@@ -217,6 +217,7 @@ func _apply_metrics_change() -> void:
 	var col_shape: CollisionShape2D = get_node_or_null("Area2D/CollisionShape2D")
 	if col_shape and col_shape.shape is RectangleShape2D:
 		col_shape.shape.size = metrics.hitbox_size
+		col_shape.position = Vector2(0, -metrics.hitbox_size.y * 0.5)
 
 	if current_state in [CatState.EDGE_HANG, CatState.CLIMB_UP, CatState.WALL_CLING, CatState.WALL_CLIMB]:
 		if current_state in [CatState.WALL_CLING, CatState.WALL_CLIMB]:
@@ -1151,8 +1152,15 @@ func handle_command(command: int, payload: Dictionary = {}) -> void:
 		6: # DRAG_MOVE
 			if current_state == CatState.DRAG:
 				var vp := _get_viewport_size(); var t: Vector2 = Vector2(payload.get("mouse_pos", position)) + drag_offset
-				position = Vector2(clampf(t.x, body_radius, vp.x - body_radius), clampf(t.y, 30.0, vp.y - 30.0))
+				var new_pos := Vector2(clampf(t.x, body_radius, vp.x - body_radius), clampf(t.y, 30.0, vp.y - 30.0))
+				var move_dx: float = new_pos.x - position.x
+				if visual_root != null:
+					visual_root.rotation = lerpf(visual_root.rotation, clampf(move_dx * 0.03, -0.32, 0.32), 0.3)
+				position = new_pos
 		7: # DRAG_END
+			if visual_root != null:
+				var tw := create_tween()
+				tw.tween_property(visual_root, "rotation", 0.0, 0.15).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 			var tv: Vector2 = payload.get("throw_velocity", Vector2.ZERO); horizontal_throw_speed = tv.x
 			if absf(tv.x) > 20.0: direction = 1.0 if tv.x > 0.0 else -1.0; _get_animated_sprite().flip_h = (direction < 0.0)
 			if tv.y < -50.0:
@@ -1193,12 +1201,23 @@ func _move_and_bounce(delta: float, cur_speed: float) -> void:
 	elif position.x <= body_radius: position.x = body_radius; direction = 1.0; _get_animated_sprite().flip_h = false
 
 func _on_clicked() -> void:
-	print("Cat clicked!")
-	if current_state not in [CatState.EDGE_HANG, CatState.CLIMB_UP, CatState.WALL_CLING, CatState.WALL_CLIMB]:
-		var sprite := _get_animated_sprite()
-		if sprite: var tw := create_tween(); tw.tween_property(sprite, "position:y", -16.0, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT); tw.tween_property(sprite, "position:y", 0.0, 0.12).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	print("[Cat] 被鼠标轻抚点击！触发开心互动！")
+	if visual_root != null:
+		var tw := create_tween()
+		tw.tween_property(visual_root, "scale:y", visual_root.scale.y * 0.82, 0.08).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tw.tween_property(visual_root, "scale:y", visual_root.scale.y, 0.12).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	
+	_spawn_floating_heart()
 	var main_p := get_parent()
-	if main_p and "mouse_perception_controller" in main_p and main_p.mouse_perception_controller: main_p.mouse_perception_controller.suppress_curiosity()
+	if main_p and "mouse_perception_controller" in main_p and main_p.mouse_perception_controller:
+		main_p.mouse_perception_controller.suppress_curiosity()
+
+func _spawn_floating_heart() -> void:
+	var heart := Node2D.new()
+	heart.set_script(preload("res://scripts/cat/floating_heart.gd"))
+	var head_y: float = -metrics.body_height if metrics != null else -50.0
+	heart.position = Vector2(randf_range(-10.0, 10.0), head_y - 12.0)
+	add_child(heart)
 
 func _get_animated_sprite() -> AnimatedSprite2D:
 	if not _animated_sprite:

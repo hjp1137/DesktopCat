@@ -68,8 +68,10 @@ script = ExtResource("2_cat_shadow")
 sprite_frames = SubResource("SpriteFrames_cat")
 animation = &"idle"
 autoplay = "idle"
+offset = Vector2(0, -26)
 
 [node name="Area2D" type="Area2D" parent="."]
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
+position = Vector2(0, -28)
 shape = SubResource("RectangleShape2D_cat")

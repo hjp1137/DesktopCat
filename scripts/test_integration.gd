@@ -103,6 +103,7 @@ func _process(delta: float) -> bool:
 		print("========== 阶段 6: 触发 ESC 安全退出 ==========")
 		var ev_esc := InputEventKey.new(); ev_esc.keycode = KEY_ESCAPE; ev_esc.pressed = true
 		main_scene._input(ev_esc)
+		quit(0)
 		return true
 	return false
 

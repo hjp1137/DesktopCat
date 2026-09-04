@@ -37,6 +37,8 @@ func setup(p_cat: Node2D, p_visual_root: Node2D, p_sprite: AnimatedSprite2D) -> 
 	cat = p_cat
 	visual_root = p_visual_root
 	animated_sprite = p_sprite
+	if animated_sprite != null:
+		animated_sprite.offset = Vector2(0, -26)
 	if cat != null and cat.has_signal("landed"):
 		if not cat.is_connected("landed", Callable(self, "_on_cat_landed")):
 			cat.connect("landed", Callable(self, "_on_cat_landed"))

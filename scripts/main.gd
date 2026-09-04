@@ -12,8 +12,10 @@ const PlatformNavigationGraphClass = preload("res://scripts/navigation/platform_
 const AutonomousJumpPlannerClass = preload("res://scripts/navigation/autonomous_jump_planner.gd")
 const ScreenExplorationControllerClass = preload("res://scripts/exploration/screen_exploration_controller.gd")
 const SurfaceClass = preload("res://scripts/world/surface.gd")
+const CatGymClass = preload("res://scripts/world/cat_gym.gd")
 
 @onready var cat: Node2D = $Cat
+var cat_gym: Node2D = null
 var command_manager: CommandManager = null
 var mouse_controller: Node = null
 var mouse_perception_controller: Node = null
@@ -63,6 +65,11 @@ func _ready() -> void:
 		cat.set("surface_world_model", surface_world_model)
 		if cat.has_method("on_surface_world_updated"):
 			surface_world_model.surface_world_updated.connect(cat.on_surface_world_updated)
+	
+	cat_gym = CatGymClass.new()
+	cat_gym.name = "CatGym"
+	add_child(cat_gym)
+	move_child(cat_gym, 0)
 	
 	ui_element_world_model = UIElementWorldModelClass.new()
 	add_child(ui_element_world_model)
@@ -170,6 +177,12 @@ func _apply_screen_layout(screen_idx: int) -> void:
 		screen_exploration_controller.notify_route_cancelled("DISPLAY_SWITCHED")
 		screen_exploration_controller.memory.recent_surfaces.clear()
 		screen_exploration_controller.last_candidates.clear()
+	
+	if cat_gym != null and is_instance_valid(cat_gym):
+		var gym_x: float = clampf(screen_size.x * 0.18, 160.0, 420.0)
+		var gym_y: float = float(screen_size.y)
+		cat_gym.setup(gym_x, gym_y)
+		_inject_cat_gym_surfaces()
 
 
 func update_mouse_passthrough(cat_pos: Vector2) -> void:
@@ -345,6 +358,15 @@ func _handle_key_event(event: InputEventKey) -> bool:
 func _on_window_world_updated(_rev: int) -> void:
 	if is_instance_valid(surface_fusion_builder):
 		surface_fusion_builder.execute_fusion()
+	_inject_cat_gym_surfaces()
+
+func _inject_cat_gym_surfaces() -> void:
+	if cat_gym == null or not is_instance_valid(cat_gym) or surface_world_model == null: return
+	var gym_surfs: Array = cat_gym.generate_surfaces()
+	for s in gym_surfs:
+		surface_world_model.surfaces_by_id[s.id] = s
+	surface_world_model.surface_revision += 1
+	surface_world_model.surface_world_updated.emit(surface_world_model.surface_revision)
 
 
 
@@ -415,26 +437,6 @@ func _cleanup_perception_service() -> void:
 		perception_service_pid = -1
 
 func _spawn_fallback_demo_surfaces() -> void:
-	if surface_world_model == null: return
-	# 若已经有外部窗口实体接入 (表面数量 > 4)，则无需注入演示平台
-	if surface_world_model.surfaces_by_id.size() > 4: return
-	
-	var vp: Vector2 = Vector2(get_window().size) if get_window() else Vector2(1280, 720)
-	if vp.x <= 100 or vp.y <= 100: vp = Vector2(1920, 1080)
-	
-	var shelf_y: float = vp.y * 0.55
-	var shelf_x1: float = vp.x * 0.35
-	var shelf_x2: float = vp.x * 0.65
-	
-	print("[Main] 纯单机环境：自动注入演示桌面平台与垂直攀爬柱以供探索攀爬")
-	var surf_top = SurfaceClass.new("demo:shelf:top", "demo", "WINDOW", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, shelf_x1, shelf_y, shelf_x2, shelf_y, true, false, false)
-	var surf_left = SurfaceClass.new("demo:shelf:left", "demo", "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, shelf_x1, shelf_y, shelf_x1, shelf_y + 180.0, false, false, true)
-	var surf_right = SurfaceClass.new("demo:shelf:right", "demo", "WINDOW", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.RIGHT, shelf_x2, shelf_y, shelf_x2, shelf_y + 180.0, false, false, true)
-	
-	surface_world_model.surfaces_by_id[surf_top.id] = surf_top
-	surface_world_model.surfaces_by_id[surf_left.id] = surf_left
-	surface_world_model.surfaces_by_id[surf_right.id] = surf_right
-	surface_world_model.surface_revision += 1
-	surface_world_model.surface_world_updated.emit(surface_world_model.surface_revision)
+	_inject_cat_gym_surfaces()
 
 
