@@ -2,6 +2,7 @@
 setlocal
 cd /d "%~dp0"
 
+echo [DesktopCat] Starting perception service...
 where pythonw >nul 2>nul
 if %errorlevel% equ 0 (
     start "" pythonw tools\perception\perception_service.py
@@ -12,8 +13,11 @@ if %errorlevel% equ 0 (
     )
 )
 
-if exist "build\DesktopCat.exe" (
-    start "" "build\DesktopCat.exe" --path "%~dp0"
-) else if exist "build\DesktopCat_Standalone.exe" (
-    start "" "build\DesktopCat_Standalone.exe" --path "%~dp0"
-)
+echo [DesktopCat] Starting DesktopCat...
+echo [DesktopCat] Shortcuts:
+echo   V / F9: Toggle virtual cat gym display
+echo   C:      Toggle mouse following
+echo   ESC:    Quit DesktopCat
+echo.
+
+build\DesktopCat_console.exe --path .
