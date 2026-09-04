@@ -17,6 +17,8 @@ func _init() -> void:
 	_pack_dir(packer, "res://assets")
 	if DirAccess.dir_exists_absolute("res://.godot/imported"):
 		_pack_dir(packer, "res://.godot/imported")
+	_pack_file(packer, "res://.godot/global_script_class_cache.cfg")
+	_pack_file(packer, "res://.godot/uid_cache.bin")
 	
 	packer.flush()
 	print("[Build] 打包完成: build/DesktopCat.pck")

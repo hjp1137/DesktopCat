@@ -12,6 +12,8 @@ if %errorlevel% equ 0 (
     )
 )
 
-if exist "build\DesktopCat_Standalone.exe" (
-    start "" build\DesktopCat_Standalone.exe
+if exist "build\DesktopCat.exe" (
+    start "" "build\DesktopCat.exe" --path "%~dp0"
+) else if exist "build\DesktopCat_Standalone.exe" (
+    start "" "build\DesktopCat_Standalone.exe" --path "%~dp0"
 )
