@@ -194,16 +194,15 @@ func _check_jump_edge(src: RefCounted, tgt: RefCounted, all_surfs: Array) -> Ref
 func _check_drop_edge(src: RefCounted, tgt: RefCounted, all_surfs: Array) -> RefCounted:
 	var delta_y: float = float(tgt.y) - float(src.y)
 	if delta_y <= 0.0 or delta_y > MAX_NAV_DROP_DISTANCE:
-
 		return null
 	var t_drop: float = capabilities.calc_drop_landing_time(delta_y)
 	if t_drop <= 0.0:
 		return null
 
-
-	# 测试从左边缘走落或从右边缘走落
+	var t_x1 := minf(float(tgt.x1), float(tgt.x2))
+	var t_x2 := maxf(float(tgt.x1), float(tgt.x2))
 	for drop_x in [src.x1, src.x2]:
-		if drop_x >= (tgt.safe_x1 - 8.0) and drop_x <= (tgt.safe_x2 + 8.0):
+		if drop_x >= (t_x1 - 4.0) and drop_x <= (t_x2 + 4.0):
 			# 验证垂直下落过程中首个相交的 walkable 表面必须是 tgt
 			var first_surf: RefCounted = null
 			var min_sy := INF
@@ -211,8 +210,8 @@ func _check_drop_edge(src: RefCounted, tgt: RefCounted, all_surfs: Array) -> Ref
 				if not bool(s.walkable): continue
 				var sy: float = float(s.y1)
 				if sy > src.y and sy <= (tgt.y + 4.0):
-					var sx1: float = minf(float(s.x1), float(s.x2)) - 8.0
-					var sx2: float = maxf(float(s.x1), float(s.x2)) + 8.0
+					var sx1: float = minf(float(s.x1), float(s.x2)) - 4.0
+					var sx2: float = maxf(float(s.x1), float(s.x2)) + 4.0
 					if drop_x >= sx1 and drop_x <= sx2:
 						if sy < min_sy:
 							min_sy = sy
@@ -372,6 +371,9 @@ func _is_trajectory_occluded(x0: float, y0: float, x1: float, y1: float, total_t
 					var sx1: float = minf(float(s.x1), float(s.x2)) - 4.0
 					var sx2: float = maxf(float(s.x1), float(s.x2)) + 4.0
 					if cx >= sx1 and cx <= sx2:
+						# 向上相邻密集小台阶 (垂直高差 <= 50px 且水平无大幅跨度)，属于单步踏足跃迁，不被上方更高级别台阶拦截
+						if y1 < y0 and absf(y1 - y0) <= 50.0 and absf(x1 - x0) <= 60.0:
+							continue
 						return true
 		prev_px = px
 		prev_py = py

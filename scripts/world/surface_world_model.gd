@@ -14,7 +14,7 @@ const MIN_CLIMBABLE_WALL_LENGTH: float = 48.0
 
 var surface_revision: int = 0
 var surfaces_by_id: Dictionary = {}
-var debug_draw_enabled: bool = false
+var debug_draw_enabled: bool = true
 var last_geometry_signature: String = ""
 var previous_window_positions: Dictionary = {}
 var window_deltas: Dictionary = {}
@@ -300,27 +300,55 @@ func find_platform_connected_to_wall_top(wall_surf, tolerance: float = 8.0) -> D
 	return best_plat
 
 func _draw() -> void:
-
 	if not debug_draw_enabled:
 		return
 	var font := ThemeDB.fallback_font
 	var walkable_count := 0
 	var wall_count := 0
 	for s in surfaces_by_id.values():
+		if s.source_type == "SCREEN" or str(s.id).begins_with("screen:"): continue
 		if s.walkable: walkable_count += 1
-		elif s.surface_type == SurfaceClass.SurfaceType.WALL: wall_count += 1
-	var banner_text := "[F9 Debug] Surface World: ON | Surfaces: %d (Walkable: %d, Walls: %d)" % [surfaces_by_id.size(), walkable_count, wall_count]
-
-	draw_string(font, Vector2(24.0, 56.0), banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.1, 0.9, 0.9, 0.95))
+		elif s.surface_type == SurfaceClass.SurfaceType.WALL and ("climbable" in s and s.climbable): wall_count += 1
+	var banner_text := "[虚拟猫爬架已开启 - 屏幕内容虚拟化] 文本/窗口台阶: %d 处, 攀爬立柱: %d 处 (按 V 或 F9 切换隐藏/显示)" % [walkable_count, wall_count]
+	draw_string(font, Vector2(24.0, 48.0), banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.2, 1.0, 0.8, 0.85))
 
 	for s in surfaces_by_id.values():
-		var p1 := Vector2(s.x1, s.y1); var p2 := Vector2(s.x2, s.y2)
-		if s.walkable:
-			draw_line(p1, p2, Color(0.2, 1.0, 0.3, 0.95), 3.0)
-		elif s.surface_type == SurfaceClass.SurfaceType.WALL:
-			draw_line(p1, p2, Color(1.0, 0.85, 0.2, 0.85), 2.0)
+		var is_screen: bool = (s.source_type == "SCREEN" or str(s.id).begins_with("screen:"))
+		if is_screen:
+			# 屏幕底边仅画柔和微光参考线
+			if s.walkable:
+				draw_line(Vector2(s.x1, s.y1), Vector2(s.x2, s.y2), Color(0.2, 0.8, 0.4, 0.35), 1.5)
+			continue
 
-		else:
-			draw_line(p1, p2, Color(0.3, 0.7, 1.0, 0.65), 2.0)
+		if s.walkable:
+			var min_x := minf(float(s.x1), float(s.x2))
+			var max_x := maxf(float(s.x1), float(s.x2))
+			var sy := float(s.y1)
+			var w := max_x - min_x
+			# 1. 柔和半透明荧光台阶底衬
+			draw_rect(Rect2(min_x, sy - 2.0, w, 5.0), Color(0.12, 0.85, 0.55, 0.30), true)
+			# 2. 顶沿高亮线
+			draw_line(Vector2(min_x, sy), Vector2(max_x, sy), Color(0.35, 1.0, 0.72, 0.90), 2.0)
+			# 3. 左右端点胶囊指示
+			draw_circle(Vector2(min_x, sy), 3.2, Color(0.5, 1.0, 0.8, 0.95))
+			draw_circle(Vector2(max_x, sy), 3.2, Color(0.5, 1.0, 0.8, 0.95))
+
+		elif s.surface_type == SurfaceClass.SurfaceType.WALL and ("climbable" in s and s.climbable):
+			var wx := float(s.x1)
+			var min_y := minf(float(s.y1), float(s.y2))
+			var max_y := maxf(float(s.y1), float(s.y2))
+			var h := max_y - min_y
+			# 1. 半透明暖金立柱柱身
+			draw_rect(Rect2(wx - 4.0, min_y, 8.0, h), Color(1.0, 0.72, 0.18, 0.25), true)
+			# 2. 垂直导轨中心线
+			draw_line(Vector2(wx, min_y), Vector2(wx, max_y), Color(1.0, 0.88, 0.35, 0.85), 2.0)
+			# 3. 爪攀横向刻度 (每隔 24px)
+			var y_cursor := min_y + 12.0
+			while y_cursor < max_y - 8.0:
+				draw_line(Vector2(wx - 5.0, y_cursor), Vector2(wx + 5.0, y_cursor), Color(1.0, 0.92, 0.5, 0.70), 1.5)
+				y_cursor += 24.0
+			# 4. 顶端与底端高亮标记
+			draw_circle(Vector2(wx, min_y), 3.5, Color(1.0, 0.9, 0.4, 0.95))
+			draw_circle(Vector2(wx, max_y), 3.5, Color(1.0, 0.9, 0.4, 0.95))
 
 

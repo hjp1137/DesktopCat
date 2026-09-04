@@ -12,10 +12,8 @@ const PlatformNavigationGraphClass = preload("res://scripts/navigation/platform_
 const AutonomousJumpPlannerClass = preload("res://scripts/navigation/autonomous_jump_planner.gd")
 const ScreenExplorationControllerClass = preload("res://scripts/exploration/screen_exploration_controller.gd")
 const SurfaceClass = preload("res://scripts/world/surface.gd")
-const CatGymClass = preload("res://scripts/world/cat_gym.gd")
 
 @onready var cat: Node2D = $Cat
-var cat_gym: Node2D = null
 var command_manager: CommandManager = null
 var mouse_controller: Node = null
 var mouse_perception_controller: Node = null
@@ -65,11 +63,6 @@ func _ready() -> void:
 		cat.set("surface_world_model", surface_world_model)
 		if cat.has_method("on_surface_world_updated"):
 			surface_world_model.surface_world_updated.connect(cat.on_surface_world_updated)
-	
-	cat_gym = CatGymClass.new()
-	cat_gym.name = "CatGym"
-	add_child(cat_gym)
-	move_child(cat_gym, 0)
 	
 	ui_element_world_model = UIElementWorldModelClass.new()
 	add_child(ui_element_world_model)
@@ -178,12 +171,6 @@ func _apply_screen_layout(screen_idx: int) -> void:
 		screen_exploration_controller.memory.recent_surfaces.clear()
 		screen_exploration_controller.last_candidates.clear()
 	
-	if cat_gym != null and is_instance_valid(cat_gym):
-		var gym_x: float = clampf(screen_size.x * 0.18, 160.0, 420.0)
-		var gym_y: float = float(screen_size.y)
-		cat_gym.setup(gym_x, gym_y)
-		_inject_cat_gym_surfaces()
-
 
 func update_mouse_passthrough(cat_pos: Vector2) -> void:
 	if DisplayServer.get_name() == "headless" or (mouse_controller and mouse_controller.get("is_dragging")): return
@@ -217,11 +204,11 @@ func _handle_key_event(event: InputEventKey) -> bool:
 					cat.release_edge()
 			_apply_screen_layout((current_target_screen + 1) % DisplayServer.get_screen_count())
 			return true
-		KEY_F8, KEY_MINUS, KEY_EQUAL, KEY_QUOTELEFT, KEY_V, KEY_W:
+		KEY_F8, KEY_MINUS, KEY_EQUAL, KEY_QUOTELEFT, KEY_W:
 			if window_world_model and window_world_model.has_method("toggle_debug_draw"):
 				window_world_model.toggle_debug_draw()
 			return true
-		KEY_F9, KEY_B:
+		KEY_F9, KEY_B, KEY_V:
 			if surface_world_model and surface_world_model.has_method("toggle_debug_draw"):
 				surface_world_model.toggle_debug_draw()
 			return true
@@ -358,15 +345,6 @@ func _handle_key_event(event: InputEventKey) -> bool:
 func _on_window_world_updated(_rev: int) -> void:
 	if is_instance_valid(surface_fusion_builder):
 		surface_fusion_builder.execute_fusion()
-	_inject_cat_gym_surfaces()
-
-func _inject_cat_gym_surfaces() -> void:
-	if cat_gym == null or not is_instance_valid(cat_gym) or surface_world_model == null: return
-	var gym_surfs: Array = cat_gym.generate_surfaces()
-	for s in gym_surfs:
-		surface_world_model.surfaces_by_id[s.id] = s
-	surface_world_model.surface_revision += 1
-	surface_world_model.surface_world_updated.emit(surface_world_model.surface_revision)
 
 
 
@@ -437,6 +415,13 @@ func _cleanup_perception_service() -> void:
 		perception_service_pid = -1
 
 func _spawn_fallback_demo_surfaces() -> void:
-	_inject_cat_gym_surfaces()
-
-
+	if surface_world_model == null: return
+	if surface_world_model.surfaces_by_id.size() > 4: return
+	var vp := get_viewport_rect().size
+	var mid_x: float = vp.x * 0.5; var bot_y: float = vp.y - 40.0
+	var s_plat = SurfaceClass.new("demo:platform:1", "demo", "DEMO", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, mid_x - 140.0, bot_y - 120.0, mid_x + 140.0, bot_y - 120.0, true, false, false)
+	var s_wall = SurfaceClass.new("demo:wall:1", "demo", "DEMO", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.LEFT, mid_x + 140.0, bot_y - 300.0, mid_x + 140.0, bot_y - 120.0, false, false, true)
+	surface_world_model.surfaces_by_id[s_plat.id] = s_plat
+	surface_world_model.surfaces_by_id[s_wall.id] = s_wall
+	surface_world_model.surface_revision += 1
+	surface_world_model.surface_world_updated.emit(surface_world_model.surface_revision)

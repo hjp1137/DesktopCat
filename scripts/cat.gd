@@ -739,7 +739,6 @@ func start_climb() -> bool:
 	if current_state != CatState.EDGE_HANG: return false
 	var feas := check_climb_feasibility()
 	if not feas.feasible:
-		print("[Climb] Cannot climb: %s" % feas.reason)
 		return false
 	var s = feas.surface
 	var target_pos := Vector2(float(feas.target_foot_x) - foot_offset.x, float(feas.target_foot_y) - foot_offset.y)

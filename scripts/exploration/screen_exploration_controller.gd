@@ -85,12 +85,16 @@ func update(delta: float) -> void:
 		arrival_dwell_timer -= delta
 		if arrival_dwell_timer <= 0.0:
 			is_dwelling = false
-			exploration_cooldown_timer = randf_range(EXPLORATION_COOLDOWN_MIN, EXPLORATION_COOLDOWN_MAX)
+			var on_ground: bool = (is_instance_valid(cat) and str(cat.current_surface_id) == "screen:ground")
+			exploration_cooldown_timer = randf_range(EXPLORATION_COOLDOWN_MIN, EXPLORATION_COOLDOWN_MAX) if on_ground else randf_range(1.5, 3.5)
 			print("[Exploration] Arrival dwell completed, entering cooldown: %.1fs" % exploration_cooldown_timer)
 
 	# 检查是否可以进行自主探索决策
-	if autonomous_exploration_enabled and can_start_exploration() and randf() < (EXPLORATION_TRIGGER_PROBABILITY * 0.05):
-		trigger_exploration_decision()
+	if autonomous_exploration_enabled and can_start_exploration():
+		var on_ground: bool = (is_instance_valid(cat) and str(cat.current_surface_id) == "screen:ground")
+		var trigger_p: float = (EXPLORATION_TRIGGER_PROBABILITY * 0.05) if on_ground else (EXPLORATION_TRIGGER_PROBABILITY * 0.25)
+		if randf() < trigger_p:
+			trigger_exploration_decision()
 
 func can_start_exploration() -> bool:
 	if not is_instance_valid(cat) or not is_instance_valid(platform_navigation_graph) or not is_instance_valid(surface_world_model):
@@ -205,9 +209,12 @@ func score_candidates(candidates: Array) -> Array:
 		# 4. Route Cost & Risk
 		var cost_pen: float = float(cand.cost) * 0.85
 		var risk_pen: float = 0.0
+		var climb_bonus: float = 0.0
 		for etype in cand.edge_types:
-			if etype == 2: risk_pen += 1.6 # DROP 边
-			elif etype in [3, 4, 5]: risk_pen += 0.6 # WALL 攀爬路线
+			if etype == 2: risk_pen += 1.2
+			elif etype in [3, 4, 5]:
+				climb_bonus += 2.0
+				reasons.append("CLIMB_INTEREST")
 
 		# 5. Penalties (Recent, Loop, Failed)
 		var recent_pen: float = 0.0
@@ -225,7 +232,7 @@ func score_candidates(candidates: Array) -> Array:
 		var fail_pen: float = 8.0 if memory.is_goal_failed_recently(tgt_id) else 0.0
 		if fail_pen > 0.0: reasons.append("RECENT_FAIL")
 
-		var total_score: float = novelty + vert_bonus + size_bonus - cost_pen - risk_pen - recent_pen - loop_pen - fail_pen
+		var total_score: float = novelty + vert_bonus + size_bonus + climb_bonus - cost_pen - risk_pen - recent_pen - loop_pen - fail_pen
 		var goal = ExplorationGoalClass.new(
 			"goal_%d_%s" % [Time.get_ticks_msec(), tgt_id],
 			tgt_id, tgt_node.get_safe_center(), g_type, total_score, float(cand.cost), reasons
