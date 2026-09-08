@@ -54,7 +54,8 @@ func _process(delta: float) -> bool:
 		assert(main_scene.window_world_model.debug_draw_enabled == true, "F8 应成功开启 Window Debug")
 		var ev_f9 := InputEventKey.new(); ev_f9.keycode = KEY_F9; ev_f9.pressed = true
 		main_scene._input(ev_f9)
-		assert(main_scene.surface_world_model.debug_draw_enabled == true, "F9 应成功开启 Surface Debug")
+		assert(main_scene.debug_window.visible, "F9 应成功开启独立调试窗口")
+		assert(not main_scene.surface_world_model.debug_draw_enabled, "主宠物窗口不应绘制 Surface Debug")
 		var ev_f10 := InputEventKey.new(); ev_f10.keycode = KEY_F10; ev_f10.pressed = true
 		main_scene._input(ev_f10)
 		assert(main_scene.cat.physics_debug_enabled == true, "F10 应成功开启 Physics Debug")
@@ -75,6 +76,11 @@ func _process(delta: float) -> bool:
 		assert(main_scene.autonomous_jump_planner.debug_draw_enabled == true, "F15/X 应成功开启 Traversal Debug")
 
 		print("========== 阶段 4c: 验证小猫下落着陆到 Chrome 顶边 ==========")
+		main_scene.screen_exploration_controller.set_process(false)
+		main_scene.autonomous_jump_planner.set_process(false)
+		main_scene.autonomous_jump_planner.cancel_route("INTEGRATION_MANUAL_FALL")
+		root.size = Vector2i(1920, 1080) # 与快照夹具一致，避免 headless 的 64px 地面。
+		main_scene.surface_fusion_builder.execute_fusion()
 		main_scene.cat.position = Vector2(400.0, 100.0)
 		main_scene.cat.vertical_velocity = 800.0
 		main_scene.cat.is_grounded = false
@@ -106,5 +112,3 @@ func _process(delta: float) -> bool:
 		quit(0)
 		return true
 	return false
-
-

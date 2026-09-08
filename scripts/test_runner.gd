@@ -1702,6 +1702,173 @@ func _init() -> void:
 	a_ctrl.toggle_debug()
 	print("[PASS] 测试 135: 动画轮播展示与 F22 调试 HUD 切换验证成功")
 
+	# ==========================================
+	# T25: 屏幕视觉占据与猫眼物理世界感知原型自动化测试 (测试 136~150)
+	# ==========================================
+	const CatPhysicsWorldModelClass = preload("res://scripts/world/cat_physics_world_model.gd")
+	var t25_model = CatPhysicsWorldModelClass.new()
+
+	# 测试 136: CatPhysicsWorldModel 初始状态与默认参数验证
+	assert(t25_model.is_enabled == false, "T25 猫眼模型默认应当关闭 (Debug Only)")
+	assert(t25_model.debug_layer_mode == 6, "默认调试图层应当为 Mode 6 (Final Surfaces)")
+	assert(t25_model.perception_mode == "hybrid", "默认感知模式应当为 hybrid (核心推荐路线)")
+	print("[PASS] 测试 136: CatPhysicsWorldModel 初始状态与默认参数验证成功")
+
+	# 测试 137: toggle_enabled 开关与重绘触发验证
+	var state1 = t25_model.toggle_enabled()
+	assert(state1 == true and t25_model.is_enabled == true, "toggle_enabled 应当切换为 ON")
+	var state2 = t25_model.toggle_enabled()
+	assert(state2 == false and t25_model.is_enabled == false, "toggle_enabled 应当切换为 OFF")
+	print("[PASS] 测试 137: toggle_enabled 开关与重绘触发验证成功")
+
+	# 测试 138: set_debug_layer_mode 模式切换与 1~7 边界 Clamp
+	t25_model.set_debug_layer_mode(3)
+	assert(t25_model.debug_layer_mode == 3, "应当切换为 Mode 3")
+	t25_model.set_debug_layer_mode(7)
+	assert(t25_model.debug_layer_mode == 7, "应当切换为 Mode 7 对比模式")
+	t25_model.set_debug_layer_mode(99)
+	assert(t25_model.debug_layer_mode == 7, "超出上限应当 Clamp 到 7")
+	t25_model.set_debug_layer_mode(-5)
+	assert(t25_model.debug_layer_mode == 1, "低于下限应当 Clamp 到 1")
+	t25_model.set_debug_layer_mode(6)
+	print("[PASS] 测试 138: set_debug_layer_mode 模式切换与 1~7 边界 Clamp 验证成功")
+
+	# 测试 139: cycle_perception_mode 模式轮转验证
+	t25_model.perception_mode = "hybrid"
+	var m1 = t25_model.cycle_perception_mode()
+	assert(m1 == "legacy" and t25_model.perception_mode == "legacy", "hybrid 之后应当轮转至 legacy")
+	var m2 = t25_model.cycle_perception_mode()
+	assert(m2 == "opencv" and t25_model.perception_mode == "opencv", "legacy 之后应当轮转至 opencv")
+	var m3 = t25_model.cycle_perception_mode()
+	assert(m3 == "hybrid" and t25_model.perception_mode == "hybrid", "opencv 之后应当轮转至 hybrid")
+	print("[PASS] 测试 139: cycle_perception_mode 模式轮转验证成功")
+
+	# 测试 140: 畸形协议包防御性拦截
+	var malformed1 = {"v": 2, "type": "t25_perception_snapshot"} # 协议版本不匹配
+	assert(t25_model.apply_snapshot(malformed1) == false, "版本不匹配的快照必须被安全拦截")
+	var malformed2 = {"v": 1, "type": "unknown_type"} # 类型不匹配
+	assert(t25_model.apply_snapshot(malformed2) == false, "未知类型的快照必须被安全拦截")
+	print("[PASS] 测试 140: 畸形协议包防御性拦截验证成功")
+
+	# 测试 141: apply_snapshot 正常解析三路感知表面数据
+	var valid_snapshot = {
+		"v": 1,
+		"type": "t25_perception_snapshot",
+		"revision": 1,
+		"mode": "hybrid",
+		"surfaces": {
+			"legacy": [
+				{"id": "leg_1", "type": "PLATFORM", "x1": 10.0, "y1": 100.0, "x2": 30.0, "y2": 100.0},
+				{"id": "leg_2", "type": "PLATFORM", "x1": 35.0, "y1": 100.0, "x2": 55.0, "y2": 100.0}
+			],
+			"opencv": [
+				{"id": "cv_1", "type": "PLATFORM", "x1": 10.0, "y1": 100.0, "x2": 55.0, "y2": 100.0}
+			],
+			"hybrid": [
+				{"id": "hy_1", "type": "PLATFORM", "x1": 10.0, "y1": 100.0, "x2": 55.0, "y2": 100.0, "confidence": 0.95},
+				{"id": "hy_w", "type": "WALL", "x1": 10.0, "y1": 100.0, "x2": 10.0, "y2": 160.0, "confidence": 0.85},
+				{"id": "hy_led", "type": "LEDGE", "side": "LEFT", "x1": 10.0, "y1": 100.0, "x2": 22.0, "y2": 100.0}
+			]
+		},
+		"debug_layers": {
+			"raw_evidence": [{"type": "LINE", "x1": 10.0, "y1": 100.0, "x2": 55.0, "y2": 100.0}],
+			"candidates": [{"x": 10.0, "y": 100.0, "w": 45.0, "h": 12.0}],
+			"merged_regions": [{"x": 10.0, "y": 96.0, "w": 45.0, "h": 8.0}],
+			"stable_regions": [{"x": 10.0, "y": 97.0, "w": 45.0, "h": 6.0}],
+			"final_surfaces": []
+		},
+		"metrics": {
+			"frame": 1,
+			"timing": {"cv_ms": 12.5, "hybrid_ms": 7.2, "total_ms": 22.4},
+			"legacy": {"final_surface_count": 2, "fragmentation_count": 2, "average_surface_length": 20.0},
+			"opencv": {"final_surface_count": 1, "stable_surface_count": 1, "fragmentation_count": 0, "temporal_jitter": 1, "average_surface_length": 45.0},
+			"hybrid": {"candidate_region_count": 4, "final_surface_count": 3, "stable_surface_count": 3, "fragmentation_count": 0, "temporal_jitter": 0, "reduction_ratio": 4.0, "average_surface_length": 45.0}
+		}
+	}
+	var parse_ok = t25_model.apply_snapshot(valid_snapshot)
+	assert(parse_ok == true, "合规快照必须成功解析")
+	assert(t25_model.legacy_surfaces.size() == 2, "Legacy 表面应为 2 条")
+	assert(t25_model.opencv_surfaces.size() == 1, "OpenCV 表面应为 1 条")
+	assert(t25_model.hybrid_surfaces.size() == 3, "Hybrid 表面应为 3 条")
+	print("[PASS] 测试 141: apply_snapshot 正常解析三路感知表面数据成功")
+
+	# 测试 142: apply_snapshot 正常解析 5 种调试图层
+	assert(t25_model.debug_layers.has("candidates"), "必须包含 candidates 图层")
+	assert(t25_model.debug_layers["candidates"].size() == 1, "candidates 应有 1 个候选块")
+	assert(t25_model.debug_layers.has("merged_regions"), "必须包含 merged_regions 图层")
+	assert(t25_model.debug_layers.has("stable_regions"), "必须包含 stable_regions 图层")
+	print("[PASS] 测试 142: apply_snapshot 正常解析 5 种调试图层验证成功")
+
+	# 测试 143: apply_snapshot 正常解析量化指标
+	assert(t25_model.metrics.has("timing"), "必须包含 timing 指标")
+	assert(t25_model.metrics["hybrid"]["reduction_ratio"] == 4.0, "压缩比必须为 4.0")
+	assert(t25_model.metrics["hybrid"]["fragmentation_count"] == 0, "Hybrid 碎片数应为 0")
+	assert(t25_model.metrics["legacy"]["fragmentation_count"] == 2, "Legacy 碎片数应为 2")
+	print("[PASS] 测试 143: apply_snapshot 正常解析量化指标验证成功")
+
+	# 测试 144: 快照 revision 递增与过期快照丢弃
+	var old_snapshot = valid_snapshot.duplicate(true)
+	old_snapshot["revision"] = 1 # 相同或更小的版本
+	assert(t25_model.apply_snapshot(old_snapshot) == false, "旧版本或重复版本快照必须安全丢弃")
+	var new_snapshot = valid_snapshot.duplicate(true)
+	new_snapshot["revision"] = 2
+	assert(t25_model.apply_snapshot(new_snapshot) == true, "更新版本快照必须被接收")
+	print("[PASS] 测试 144: 快照 revision 递增与过期快照丢弃验证成功")
+
+	# 测试 145: get_active_surfaces 随 perception_mode 动态切换
+	t25_model.perception_mode = "legacy"
+	assert(t25_model.get_active_surfaces().size() == 2, "legacy 模式应当返回 legacy_surfaces")
+	t25_model.perception_mode = "opencv"
+	assert(t25_model.get_active_surfaces().size() == 1, "opencv 模式应当返回 opencv_surfaces")
+	t25_model.perception_mode = "hybrid"
+	assert(t25_model.get_active_surfaces().size() == 3, "hybrid 模式应当返回 hybrid_surfaces")
+	print("[PASS] 测试 145: get_active_surfaces 随 perception_mode 动态切换验证成功")
+
+	# 测试 146: ExternalBridge 对 t25_perception_snapshot 协议路由分发验证
+	bridge.set("cat_physics_world_model", t25_model)
+	var bridge_snapshot_msg = JSON.stringify({
+		"v": 1,
+		"type": "t25_perception_snapshot",
+		"revision": 3,
+		"mode": "hybrid",
+		"surfaces": {"legacy": [], "opencv": [], "hybrid": []},
+		"debug_layers": {},
+		"metrics": {}
+	})
+	bridge._handle_raw_message(bridge_snapshot_msg)
+	assert(t25_model.latest_revision == 3, "Bridge 应当正确路由并更新 t25_model 的 revision")
+	print("[PASS] 测试 146: ExternalBridge 路由分发验证成功")
+
+	# 测试 147: Mode 7 对比视图在三路表面均存在时的安全配置与状态验证
+	t25_model.is_enabled = true
+	t25_model.debug_layer_mode = 7
+	assert(t25_model.debug_layer_mode == 7, "应当成功配置为 Mode 7 对比视图")
+	print("[PASS] 测试 147: Mode 7 对比视图配置与状态验证成功")
+
+	# 测试 148: HUD 仪表盘在缺失部分指标时的防御性降级防护验证
+	t25_model.metrics = {} # 清空指标测试降级防护
+	assert(t25_model.metrics.is_empty(), "指标字典允许安全为空降级")
+	print("[PASS] 测试 148: HUD 仪表盘缺失指标时的防御性降级验证成功")
+
+	# 测试 149: 坐标包含异常值时的安全容错
+	var dirty_surfaces = [
+		{"id": "nan_p", "type": "PLATFORM", "x1": NAN, "y1": 100.0, "x2": 200.0, "y2": 100.0},
+		{"id": "valid_p", "type": "PLATFORM", "x1": 50.0, "y1": 100.0, "x2": 150.0, "y2": 100.0}
+	]
+	t25_model.hybrid_surfaces = dirty_surfaces
+	t25_model.set_debug_layer_mode(6)
+	assert(t25_model.get_active_surfaces().size() == 2, "表面列表容纳脏数据而不崩溃")
+	print("[PASS] 测试 149: 坐标包含异常值时的安全容错验证成功")
+
+	# 测试 150: CatMetrics 与感知端尺度自适应契约验证
+	assert(cat.metrics != null, "CatMetrics 必须可用")
+	var gap_tol = cat.metrics.foot_width * 0.45
+	assert(gap_tol >= 8.0, "自适应间隙容差必须根据 foot_width 正确推导且 >= 8px")
+	assert(cat.metrics.min_platform_length >= 20.0, "自适应最小踏板长度必须 >= 20px")
+	print("[PASS] 测试 150: CatMetrics 与感知端尺度自适应契约验证成功")
+
+	t25_model.queue_free()
+
 	planner_t22.queue_free()
 	exp_ctrl.queue_free()
 	fusion_builder.queue_free()
@@ -1712,7 +1879,7 @@ func _init() -> void:
 	world_model.queue_free()
 	cat.queue_free(); cmd_mgr.queue_free()
 	planner.queue_free()
-	print("========== T24 Art & Animation Upgrade 单元测试全部通过 (共135项测试) ==========")
+	print("========== T25 Visual Occupancy Perception Prototype 单元测试全部通过 (共150项测试) ==========")
 	quit(0)
 
 

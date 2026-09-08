@@ -92,7 +92,7 @@ func update(delta: float) -> void:
 	# 检查是否可以进行自主探索决策
 	if autonomous_exploration_enabled and can_start_exploration():
 		var on_ground: bool = (is_instance_valid(cat) and str(cat.current_surface_id) == "screen:ground")
-		var trigger_p: float = (EXPLORATION_TRIGGER_PROBABILITY * 0.05) if on_ground else (EXPLORATION_TRIGGER_PROBABILITY * 0.25)
+		var trigger_p: float = (EXPLORATION_TRIGGER_PROBABILITY * 0.35) if on_ground else (EXPLORATION_TRIGGER_PROBABILITY * 0.50)
 		if randf() < trigger_p:
 			trigger_exploration_decision()
 
@@ -202,9 +202,14 @@ func score_candidates(candidates: Array) -> Array:
 			elif dy > 50.0: g_type = ExplorationGoalClass.GoalType.ASCEND
 			else: g_type = ExplorationGoalClass.GoalType.DESCEND
 
-		# 3. Size Safety
+		# 3. Size Safety & Content Element Boost
 		var size_bonus: float = clampf((float(tgt_node.length) - 60.0) * 0.015, 0.0, 3.5)
 		if size_bonus > 1.5: reasons.append("SAFE_WIDE")
+		# 屏幕游乐场核心：对文本行、控件与视觉内容表面赋予高吸引力
+		var content_bonus: float = 0.0
+		if tgt_node.source_type in ["VISUAL", "UIA"]:
+			content_bonus = 3.5
+			reasons.append("CONTENT_ELEMENT")
 
 		# 4. Route Cost & Risk
 		var cost_pen: float = float(cand.cost) * 0.85
@@ -232,7 +237,7 @@ func score_candidates(candidates: Array) -> Array:
 		var fail_pen: float = 8.0 if memory.is_goal_failed_recently(tgt_id) else 0.0
 		if fail_pen > 0.0: reasons.append("RECENT_FAIL")
 
-		var total_score: float = novelty + vert_bonus + size_bonus + climb_bonus - cost_pen - risk_pen - recent_pen - loop_pen - fail_pen
+		var total_score: float = novelty + vert_bonus + size_bonus + content_bonus + climb_bonus - cost_pen - risk_pen - recent_pen - loop_pen - fail_pen
 		var goal = ExplorationGoalClass.new(
 			"goal_%d_%s" % [Time.get_ticks_msec(), tgt_id],
 			tgt_id, tgt_node.get_safe_center(), g_type, total_score, float(cand.cost), reasons

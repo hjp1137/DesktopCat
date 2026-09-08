@@ -14,7 +14,7 @@ const MIN_CLIMBABLE_WALL_LENGTH: float = 48.0
 
 var surface_revision: int = 0
 var surfaces_by_id: Dictionary = {}
-var debug_draw_enabled: bool = true
+var debug_draw_enabled: bool = false
 var last_geometry_signature: String = ""
 var previous_window_positions: Dictionary = {}
 var window_deltas: Dictionary = {}
@@ -91,7 +91,7 @@ func commit_surfaces(new_surfaces: Dictionary, new_window_deltas: Dictionary = {
 	keys.sort()
 	for k in keys:
 		var s = new_surfaces[k]
-		sig_parts.append("%s:%.1f,%.1f->%.1f,%.1f" % [s.id, s.x1, s.y1, s.x2, s.y2])
+		sig_parts.append("%s:%.1f,%.1f->%.1f,%.1f:%d:%d:%s:%s" % [s.id, s.x1, s.y1, s.x2, s.y2, s.surface_type, s.orientation, s.walkable, s.climbable])
 	var sig := ";".join(sig_parts)
 
 	if sig != last_geometry_signature:
@@ -309,7 +309,7 @@ func _draw() -> void:
 		if s.source_type == "SCREEN" or str(s.id).begins_with("screen:"): continue
 		if s.walkable: walkable_count += 1
 		elif s.surface_type == SurfaceClass.SurfaceType.WALL and ("climbable" in s and s.climbable): wall_count += 1
-	var banner_text := "[虚拟猫爬架已开启 - 屏幕内容虚拟化] 文本/窗口台阶: %d 处, 攀爬立柱: %d 处 (按 V 或 F9 切换隐藏/显示)" % [walkable_count, wall_count]
+	var banner_text := "[屏幕元素虚拟化 - 常态线条展示] 文本/窗口台阶: %d 处, 攀爬立柱: %d 处 | 按 V 或 F9 切换隐藏/显示" % [walkable_count, wall_count]
 	draw_string(font, Vector2(24.0, 48.0), banner_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.2, 1.0, 0.8, 0.85))
 
 	for s in surfaces_by_id.values():
@@ -350,5 +350,3 @@ func _draw() -> void:
 			# 4. 顶端与底端高亮标记
 			draw_circle(Vector2(wx, min_y), 3.5, Color(1.0, 0.9, 0.4, 0.95))
 			draw_circle(Vector2(wx, max_y), 3.5, Color(1.0, 0.9, 0.4, 0.95))
-
-

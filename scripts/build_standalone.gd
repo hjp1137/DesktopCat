@@ -20,15 +20,34 @@ func _init() -> void:
 	_pack_file(packer, "res://.godot/global_script_class_cache.cfg")
 	_pack_file(packer, "res://.godot/uid_cache.bin")
 	
-	packer.flush()
+	err = packer.flush()
+	if err != OK:
+		printerr("写入 PCK 失败: ", err)
+		quit(1)
+		return
 	print("[Build] 打包完成: build/DesktopCat.pck")
-	DirAccess.copy_absolute("build/DesktopCat.pck", "build/DesktopCat_Standalone.pck")
+	err = DirAccess.copy_absolute("build/DesktopCat.pck", "build/DesktopCat_Standalone.pck")
+	if err != OK:
+		printerr("复制 Standalone PCK 失败: ", err)
+		quit(1)
+		return
 	print("[Build] 已同步至: build/DesktopCat_Standalone.pck")
+	var perception_dir := "res://build/tools/perception"
+	DirAccess.make_dir_recursive_absolute(perception_dir)
+	for file_name in DirAccess.get_files_at("res://tools/perception"):
+		if not file_name.ends_with(".py") or file_name.begins_with("test_") or file_name == "desktop_fixture.py":
+			continue
+		err = DirAccess.copy_absolute("res://tools/perception/" + file_name, perception_dir.path_join(file_name))
+		if err != OK:
+			printerr("复制感知脚本失败: ", file_name, " error=", err)
+			quit(1)
+			return
 	quit(0)
 
 func _pack_file(packer: PCKPacker, path: String) -> void:
 	if FileAccess.file_exists(path):
-		packer.add_file(path, path)
+		var err := packer.add_file(path, path)
+		assert(err == OK, "打包文件失败: %s (%s)" % [path, err])
 		print("[Build] 已添加: ", path)
 
 func _pack_dir(packer: PCKPacker, dir_path: String) -> void:

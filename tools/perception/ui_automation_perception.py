@@ -9,6 +9,10 @@ import socket
 import json
 import time
 import sys
+if __package__:
+    from . import desktop_dpi
+else:
+    import desktop_dpi
 
 user32 = ctypes.windll.user32
 ole32 = ctypes.windll.ole32
@@ -127,14 +131,11 @@ class UIAutomationProvider:
                         ctype = UIA_CONTROL_TYPES.get(t.value, "Other")
                         rid_str = self.get_element_runtime_id(curr, f"{ctype}:{path}")
                         eid = f"{window_id}:{rid_str}"
+
+                        # UIA 只保留真实容器几何，具体文字行交由视觉检测。
                         elements.append({
-                            "id": eid,
-                            "window_id": window_id,
-                            "control_type": ctype,
-                            "x": lx,
-                            "y": ly,
-                            "width": lw,
-                            "height": lh
+                            "id": eid, "window_id": window_id, "control_type": ctype,
+                            "x": lx, "y": ly, "width": lw, "height": lh
                         })
 
             if depth < max_depth:
@@ -158,18 +159,21 @@ class MONITORINFO(Structure):
     _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
 
 class UIAutomationPerceptionService:
-    def __init__(self, host: str = "127.0.0.1", port: int = 47831):
+    def __init__(self, host: str = "127.0.0.1", port: int = 47831,
+                 snapshot_sink=None):
         self.host = host
         self.port = port
         self.sock = None
         self.reader = None
         self.provider = UIAutomationProvider()
         self.godot_hwnd = None
-        self.screen_info = {"index": 0, "width": 1920, "height": 1080}
+        self.screen_info = {"index": 0, "x": 0, "y": 0,
+                            "width": 1920, "height": 1080}
         self.ui_revision = 0
         self.last_signature = ""
         self.hotkey_states = {}
         self.last_stat_time = time.time()
+        self.snapshot_sink = snapshot_sink
 
     def _send_msg(self, obj: dict) -> bool:
         if not self.sock: return False
@@ -195,11 +199,16 @@ class UIAutomationPerceptionService:
         res = self._recv_line()
         if res.get("type") == "status":
             screen = res.get("screen", {})
+            previous_screen = self.screen_info
             self.screen_info = {
                 "index": int(screen.get("index", 0)),
+                "x": int(screen.get("x", 0)),
+                "y": int(screen.get("y", 0)),
                 "width": int(screen.get("width", 1920)),
                 "height": int(screen.get("height", 1080))
             }
+            if previous_screen != self.screen_info:
+                self.last_signature = None
 
     def _ensure_godot_hwnd(self):
         def cb(h, _):
@@ -217,6 +226,7 @@ class UIAutomationPerceptionService:
             self.sock.connect((self.host, self.port))
             self.reader = self.sock.makefile("r", encoding="utf-8")
             self._update_status()
+            self.last_signature = None
             self._ensure_godot_hwnd()
             print(f"[UIA] Connected to DesktopCat ({self.host}:{self.port}), Screen {self.screen_info.get('index', 0)}")
             print("[UIA] 提示: 按 [F11] 或 [K]/[O] 切换【UI Automation 控件几何】调试线框！")
@@ -243,13 +253,8 @@ class UIAutomationPerceptionService:
         overlay_w = self.screen_info.get("width", 1920)
         overlay_h = self.screen_info.get("height", 1080)
 
-        sx, sy, sw, sh = 0, 0, 1920, 1080
-        if self.godot_hwnd:
-            mi = MONITORINFO(); mi.cbSize = ctypes.sizeof(MONITORINFO)
-            h_mon = user32.MonitorFromWindow(self.godot_hwnd, 2)
-            if h_mon and user32.GetMonitorInfoW(h_mon, ctypes.byref(mi)):
-                sx = mi.rcWork.left; sy = mi.rcWork.top
-                sw = mi.rcWork.right - sx; sh = mi.rcWork.bottom - sy
+        sx = self.screen_info["x"]; sy = self.screen_info["y"]
+        sw = self.screen_info["width"]; sh = self.screen_info["height"]
 
         scale_x = (float(overlay_w) / sw) if (overlay_w > 0 and sw > 0) else 1.0
         scale_y = (float(overlay_h) / sh) if (overlay_h > 0 and sh > 0) else 1.0
@@ -261,7 +266,10 @@ class UIAutomationPerceptionService:
             if h == self.godot_hwnd: return 1
             buf = ctypes.create_unicode_buffer(256)
             user32.GetClassNameW(h, buf, 256)
-            if buf.value in ("Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"): return 1
+            if buf.value in ("Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "ConsoleWindowClass"): return 1
+            title = ctypes.create_unicode_buffer(256)
+            user32.GetWindowTextW(h, title, 256)
+            if "Godot Engine (Console)" in title.value or "DesktopCat" in title.value: return 1
             rect = wintypes.RECT()
             user32.GetWindowRect(h, ctypes.byref(rect))
             if (rect.right - rect.left) <= 32 or (rect.bottom - rect.top) <= 32: return 1
@@ -278,12 +286,12 @@ class UIAutomationPerceptionService:
 
         total_elements = []
         total_raw = 0
-        budget_s = 0.035
+        budget_s = 0.080
         for h in ordered:
             wid = f"0x{h:08X}"
             elems, raw_cnt = self.provider.scan_window_elements(
                 h, wid, sx, sy, sw, sh, scale_x, scale_y, t0, budget_s,
-                max_depth=10, max_elements=(1000 - len(total_elements))
+                max_depth=12, max_elements=(1500 - len(total_elements))
             )
             total_elements.extend(elems)
             total_raw += raw_cnt
@@ -307,6 +315,8 @@ class UIAutomationPerceptionService:
                 "screen": {"index": target_scr, "width": overlay_w, "height": overlay_h},
                 "elements": total_elements
             }
+            if self.snapshot_sink:
+                self.snapshot_sink("ui_elements", total_elements, self.screen_info)
             if self._send_msg(snapshot): self._recv_line()
 
     def run(self):
@@ -324,7 +334,6 @@ if __name__ == "__main__":
     service = UIAutomationPerceptionService()
     try: service.run()
     except KeyboardInterrupt: print("\n[UIA] Service Stopped.")
-
 
 
 

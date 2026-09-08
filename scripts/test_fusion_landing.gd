@@ -80,5 +80,30 @@ func _init():
 	assert(cat.is_grounded == true, "Cat should be grounded on Visual Line")
 	assert(cat.current_surface_id == "vg:line_div", "Cat landed on Visual Line")
 
-	print("========== T16 多感知实体着陆物理验证全部成功！ ==========")
+	# T25 必须经过真实融合器和 Cat 下落处理，不能手动摆放脚底代替验收。
+	var t25 := {"v": 1, "type": "t25_perception_snapshot", "session_id": "landing", "revision": 1,
+		"surfaces": {"hybrid": [{"id": "text", "type": "PLATFORM", "x1": 100, "x2": 400, "y1": 320, "y2": 320},
+		{"id": "image_right", "type": "WALL", "orientation": "RIGHT", "x1": 500, "x2": 500, "y1": 100, "y2": 700}]}}
+	main.external_bridge._handle_t25_perception_snapshot(t25)
+	main.surface_fusion_builder.execute_fusion()
+	cat.position = Vector2(250, 220)
+	cat.vertical_velocity = 200
+	cat.is_grounded = false
+	cat.change_state(Cat.CatState.FALL)
+	for i in range(45):
+		cat.update_state(0.016)
+		if cat.is_grounded: break
+	assert(cat.is_grounded and cat.current_surface_id == "t25:text", "T25 text supports real Cat falling")
+	assert(absf(cat.get_foot_position().y - 320.0) < 0.01, "T25 foot contact error below 0.01 px")
+	print("PASS T25 real fall contact error=", absf(cat.get_foot_position().y - 320.0))
+	cat.position = Vector2(500 + cat.metrics.wall_cling_offset_x, 300)
+	cat.is_grounded = false
+	cat.wall_cooldown = 0
+	cat.vertical_velocity = 100
+	cat.change_state(Cat.CatState.FALL)
+	cat._check_wall_attach(cat.position, cat.position)
+	assert(cat.current_state == Cat.CatState.WALL_CLING, "T25 RIGHT image wall attaches from outside")
+	assert(cat.current_wall_attachment.attach_side == 1, "T25 RIGHT wall preserves positive attach side")
+	print("PASS T25 RIGHT wall attached outside with side=1")
+	print("========== T16/T25 多感知实体着陆物理验证全部成功！ ==========")
 	quit(0)

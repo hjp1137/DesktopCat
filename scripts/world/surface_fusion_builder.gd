@@ -7,12 +7,13 @@ const SurfaceCandidateClass = preload("res://scripts/world/surface_candidate.gd"
 const PRIORITY_SCREEN: int = 100
 const PRIORITY_WINDOW: int = 90
 const PRIORITY_UIA: int = 80
+const PRIORITY_T25: int = 70
 const PRIORITY_VISUAL: int = 60
 
-const MIN_PLATFORM_LENGTH: float = 48.0
-const MIN_TEXT_PLATFORM_LENGTH: float = 48.0
-const MIN_WALL_LENGTH: float = 48.0
-const MIN_CLIMBABLE_WALL_LENGTH: float = 48.0
+const MIN_PLATFORM_LENGTH: float = 24.0
+const MIN_TEXT_PLATFORM_LENGTH: float = 24.0
+const MIN_WALL_LENGTH: float = 32.0
+const MIN_CLIMBABLE_WALL_LENGTH: float = 32.0
 
 const MERGE_Y_TOLERANCE: float = 4.0
 const MERGE_GAP: float = 16.0
@@ -31,10 +32,12 @@ const ALLOWED_UIA_TYPES: Array[String] = ["Text", "Hyperlink", "Button", "Edit",
 var window_world_model: Node2D = null
 var ui_element_world_model: Node2D = null
 var visual_world_model: Node2D = null
+var cat_physics_world_model: Node2D = null
 var surface_world_model: Node2D = null
 var cat: Node2D = null
 
 var pending_fusion: bool = false
+var using_t25_snapshot: bool = false
 var debounce_timer: float = 0.0
 var debug_diagnostics_enabled: bool = false
 
@@ -67,6 +70,8 @@ func request_fusion() -> void:
 	debounce_timer = FUSION_DEBOUNCE_SEC
 
 func _process(delta: float) -> void:
+	if using_t25_snapshot and not _has_fresh_t25_snapshot():
+		execute_fusion() # 服务停发时也要移除冻结表面，不依赖新的快照事件。
 	if pending_fusion:
 		debounce_timer -= delta
 		if debounce_timer <= 0.0:
@@ -250,6 +255,26 @@ func _extract_visual_candidates(geometries: Dictionary) -> Array:
 				list.append(SurfaceCandidateClass.new("vg:%s:right" % gid, "VISUAL", gid, "VisualRect", SurfaceClass.SurfaceType.WALL, SurfaceClass.Orientation.RIGHT, r.end.x, r.position.y, r.end.x, r.end.y, false, true, PRIORITY_VISUAL))
 	return list
 
+func _extract_t25_candidates(surfaces: Array) -> Array:
+	var list: Array = []
+	for raw in surfaces:
+		if typeof(raw) != TYPE_DICTIONARY:
+			continue
+		var sid := str(raw.get("id", ""))
+		var stype := str(raw.get("type", ""))
+		var x1 := float(raw.get("x1", 0.0)); var y1 := float(raw.get("y1", 0.0))
+		var x2 := float(raw.get("x2", 0.0)); var y2 := float(raw.get("y2", 0.0))
+		if sid == "" or is_nan(x1) or is_inf(x1) or is_nan(y1) or is_inf(y1) \
+			or is_nan(x2) or is_inf(x2) or is_nan(y2) or is_inf(y2):
+			continue
+		if stype == "PLATFORM":
+			list.append(SurfaceCandidateClass.new("t25:%s" % sid, "HYBRID", sid, "T25Platform", SurfaceClass.SurfaceType.PLATFORM, SurfaceClass.Orientation.TOP, x1, y1, x2, y2, true, true, PRIORITY_T25))
+		elif stype == "WALL":
+			var side := str(raw.get("orientation", "LEFT"))
+			var orientation := SurfaceClass.Orientation.RIGHT if side == "RIGHT" else SurfaceClass.Orientation.LEFT
+			list.append(SurfaceCandidateClass.new("t25:%s" % sid, "HYBRID", sid, "T25Wall", SurfaceClass.SurfaceType.WALL, orientation, x1, y1, x2, y2, false, true, PRIORITY_T25))
+	return list
+
 func _deduplicate_platforms(candidates: Array) -> Array:
 	candidates.sort_custom(func(a, b):
 		if absf(a.y1 - b.y1) > MERGE_Y_TOLERANCE: return a.y1 < b.y1
@@ -284,6 +309,9 @@ func _deduplicate_platforms(candidates: Array) -> Array:
 			active.append(cand)
 	return active
 
+func _has_fresh_t25_snapshot() -> bool:
+	return is_instance_valid(cat_physics_world_model) and cat_physics_world_model.has_fresh_snapshot(STALE_PROVIDER_TIMEOUT_MS)
+
 func execute_fusion() -> bool:
 	if not is_instance_valid(surface_world_model):
 		return false
@@ -293,16 +321,21 @@ func execute_fusion() -> bool:
 
 	var win := get_window()
 	var ov_sz: Vector2 = Vector2(win.size) if win and win.size.x > 0 and win.size.y > 0 else Vector2(1920, 1080)
-	var gy: float = cat.ground_y if is_instance_valid(cat) and "ground_y" in cat and cat.ground_y > 0.0 else ov_sz.y - 48.0
+	# Screen bounds are independent of the cat's current supporting platform.
+	# Surfaces use foot coordinates; the cat subtracts foot_offset when landing.
+	var gy: float = ov_sz.y
 
-	var win_map: Dictionary = window_world_model.windows_by_id if is_instance_valid(window_world_model) else {}
-	var ui_map: Dictionary = ui_element_world_model.elements_by_id if is_instance_valid(ui_element_world_model) else {}
-	var vg_map: Dictionary = visual_world_model.geometries_by_id if is_instance_valid(visual_world_model) else {}
+	var has_t25_snapshot: bool = _has_fresh_t25_snapshot()
+	using_t25_snapshot = has_t25_snapshot
+	var win_map: Dictionary = window_world_model.windows_by_id if is_instance_valid(window_world_model) and not has_t25_snapshot else {}
+	var ui_map: Dictionary = ui_element_world_model.elements_by_id if is_instance_valid(ui_element_world_model) and not has_t25_snapshot else {}
+	var vg_map: Dictionary = visual_world_model.geometries_by_id if is_instance_valid(visual_world_model) and not has_t25_snapshot else {}
 
 	var screen_cands := _extract_screen_candidates(ov_sz, gy)
 	var win_cands := _extract_window_candidates(win_map)
 	var uia_cands := _extract_uia_candidates(ui_map, win_map)
 	var vis_cands := _extract_visual_candidates(vg_map)
+	var t25_cands := _extract_t25_candidates(cat_physics_world_model.get_active_surfaces()) if has_t25_snapshot else []
 
 	stats["screen"] = screen_cands.size()
 	stats["window"] = win_cands.size()
@@ -311,7 +344,9 @@ func execute_fusion() -> bool:
 
 	var all_raw := []
 	all_raw.append_array(screen_cands); all_raw.append_array(win_cands)
-	all_raw.append_array(uia_cands); all_raw.append_array(vis_cands)
+	all_raw.append_array(uia_cands); all_raw.append_array(t25_cands)
+	if not has_t25_snapshot:
+		all_raw.append_array(vis_cands)
 
 	var platforms: Array = []
 	var others: Array = []
@@ -356,6 +391,7 @@ func execute_fusion() -> bool:
 		var s = c.to_surface()
 		new_surfaces[s.id] = s
 		var grace := WINDOW_MISSING_GRACE_MS if s.source_type == "WINDOW" else FINAL_SURFACE_MISSING_GRACE_MS
+		if s.source_type == "HYBRID": grace = 0
 		surface_grace_map[s.id] = {"surface": s, "expire": now + grace}
 
 	var expired_keys: Array = []
@@ -387,7 +423,3 @@ func _draw() -> void:
 	var text2 := "Simplified: Small=%d, Nested=%d, Dedup=%d, Merged=%d | Fusion Time: %.2f ms" % [stats["filtered_small"], stats["filtered_nested"], stats["deduplicated"], stats["merged"], stats["fusion_ms"]]
 	draw_string(font, Vector2(24.0, 85.0), text1, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.2, 0.95, 0.4, 0.95))
 	draw_string(font, Vector2(24.0, 102.0), text2, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.9, 0.8, 0.3, 0.95))
-
-
-
-

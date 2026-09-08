@@ -23,20 +23,18 @@ except ImportError:
     HAVE_NUMPY = False
 
 from tools.perception.visual_perception_config import (
-
     SCAN_HZ, MAX_SCAN_HZ, ANALYSIS_SCALE, SCREEN_CHANGE_THRESHOLD,
     EDGE_THRESHOLD, MIN_VISUAL_LINE_LENGTH, LINE_MERGE_Y_TOLERANCE,
     LINE_MERGE_GAP, MIN_VISUAL_RECT_WIDTH, MIN_VISUAL_RECT_HEIGHT,
     GEOMETRY_QUANTIZATION, APPEAR_CONFIRM_COUNT, DISAPPEAR_CONFIRM_COUNT,
-    MAX_VISUAL_GEOMETRIES
+    MAX_VISUAL_GEOMETRIES, ENABLE_TEXT_LINE_DETECTION, MIN_TEXT_LINE_WIDTH,
+    TEXT_DIFF_THRESHOLD
 )
+
+from tools.perception.screen_capture import capture_bgra
 
 user32 = ctypes.windll.user32
 gdi32 = ctypes.windll.gdi32
-
-h_def = user32.OpenDesktopW("default", 0, False, 0x01FF)
-if h_def:
-    user32.SetThreadDesktop(h_def)
 
 class BITMAPINFOHEADER(Structure):
     _fields_ = [
@@ -51,42 +49,10 @@ class MONITORINFO(Structure):
 
 class VisualGeometryDetector:
     def __init__(self):
-        self.hdc_screen = user32.GetDC(0)
-        self.hdc_mem = gdi32.CreateCompatibleDC(self.hdc_screen)
-        gdi32.SetStretchBltMode(self.hdc_mem, 3) # COLORONCOLOR
-        self.cur_bm_w = 0
-        self.cur_bm_h = 0
-        self.hbm = None
-        self.raw_buf = None
-        self.bmi = BITMAPINFOHEADER()
-        self.bmi.biSize = ctypes.sizeof(BITMAPINFOHEADER)
-        self.bmi.biPlanes = 1
-        self.bmi.biBitCount = 32
-        self.bmi.biCompression = 0
         self.last_fingerprint = None
 
-    def __del__(self):
-        if self.hbm: gdi32.DeleteObject(self.hbm)
-        if self.hdc_mem: gdi32.DeleteDC(self.hdc_mem)
-        if self.hdc_screen: user32.ReleaseDC(0, self.hdc_screen)
-
-    def _ensure_buffer(self, w: int, h: int):
-        if w != self.cur_bm_w or h != self.cur_bm_h or not self.hbm:
-            if self.hbm: gdi32.DeleteObject(self.hbm)
-            self.cur_bm_w = w; self.cur_bm_h = h
-            self.hbm = gdi32.CreateCompatibleBitmap(self.hdc_screen, w, h)
-            gdi32.SelectObject(self.hdc_mem, self.hbm)
-            self.bmi.biWidth = w
-            self.bmi.biHeight = -h # top-down
-            self.raw_buf = (c_uint8 * (w * h * 4))()
-
     def capture_downsampled_lum(self, sx: int, sy: int, sw: int, sh: int, dw: int, dh: int):
-        if sw <= 0 or sh <= 0 or dw <= 0 or dh <= 0: return None
-        self._ensure_buffer(dw, dh)
-        gdi32.StretchBlt(self.hdc_mem, 0, 0, dw, dh, self.hdc_screen, sx, sy, sw, sh, 0x00CC0020)
-        gdi32.GetDIBits(self.hdc_mem, self.hbm, 0, dh, ctypes.byref(self.raw_buf), ctypes.byref(self.bmi), 0)
-        # Fast BGRA -> Luminance conversion: lum = (B*29 + G*150 + R*77) >> 8
-        raw = bytes(self.raw_buf)
+        raw = capture_bgra(sx, sy, sw, sh, dw, dh)
         lum = bytearray(dw * dh)
         for i in range(dw * dh):
             idx = i * 4
@@ -133,6 +99,75 @@ class VisualGeometryDetector:
                 ends = np.append(idx[splits], idx[-1])
                 for s, e in zip(starts, ends):
                     if (e - s + 1) >= min_pts: h_lines.append((y, int(s), int(e)))
+
+            # 高性能自适应文本行投射分析器 (Adaptive Text Line Profiler)
+            if ENABLE_TEXT_LINE_DETECTION:
+                h_stroke_diff = np.abs(arr[:, 1:].astype(np.int16) - arr[:, :-1].astype(np.int16))
+                stroke_mask = (h_stroke_diff >= TEXT_DIFF_THRESHOLD).astype(np.uint8)
+                row_stroke_counts = np.sum(stroke_mask, axis=1)
+
+                kernel = np.array([1, 2, 3, 2, 1], dtype=np.float32) / 9.0
+                smoothed = np.convolve(row_stroke_counts, kernel, mode='same')
+                min_strokes = max(4, int(dw * 0.006))
+                is_text_row = smoothed >= min_strokes
+
+                blocks = []
+                in_b = False
+                sy = 0
+                for y in range(dh):
+                    if is_text_row[y]:
+                        if not in_b: in_b = True; sy = y
+                    else:
+                        if in_b: in_b = False; blocks.append((sy, y))
+                if in_b: blocks.append((sy, dh))
+
+                col_gap = max(4, int(16.0 / scale_inv))
+                for b_sy, b_ey in blocks:
+                    bh = b_ey - b_sy
+                    if bh < 2: continue
+
+                    if bh <= 14:
+                        sub_lines = [(b_sy, b_ey)]
+                    else:
+                        block_counts = smoothed[b_sy:b_ey]
+                        valleys = []
+                        for i in range(2, bh - 2):
+                            if block_counts[i] <= block_counts[i-1] and block_counts[i] <= block_counts[i-2] and \
+                               block_counts[i] <= block_counts[i+1] and block_counts[i] <= block_counts[i+2]:
+                                valleys.append(b_sy + i)
+                        sub_lines = []
+                        last_y = b_sy
+                        for vy in valleys:
+                            if (vy - last_y) >= 6:
+                                sub_lines.append((last_y, vy))
+                                last_y = vy
+                        if (b_ey - last_y) >= 4:
+                            sub_lines.append((last_y, b_ey))
+
+                    final_sub_lines = []
+                    for sy_i, ey_i in sub_lines:
+                        sub_h = ey_i - sy_i
+                        if sub_h > 16:
+                            steps = max(2, int(round(sub_h / 10.0)))
+                            step_sz = sub_h / float(steps)
+                            for k in range(steps):
+                                k_sy = int(round(sy_i + k * step_sz))
+                                k_ey = int(round(sy_i + (k + 1) * step_sz))
+                                final_sub_lines.append((k_sy, k_ey))
+                        else:
+                            final_sub_lines.append((sy_i, ey_i))
+
+                    for l_sy, l_ey in final_sub_lines:
+                        line_strokes = np.sum(stroke_mask[l_sy:l_ey, :], axis=0)
+                        col_has = line_strokes > 0
+                        if not np.any(col_has): continue
+                        cols = np.where(col_has)[0]
+                        splits = np.where(np.diff(cols) > col_gap)[0]
+                        c_starts = np.insert(cols[splits + 1], 0, cols[0])
+                        c_ends = np.append(cols[splits], cols[-1])
+                        for cs, ce in zip(c_starts, c_ends):
+                            if (ce - cs + 1) * scale_inv >= MIN_TEXT_LINE_WIDTH:
+                                h_lines.append((l_sy, int(cs), int(ce)))
 
             v_diff = np.abs(arr[:, :-1].astype(np.int16) - arr[:, 1:].astype(np.int16)) >= EDGE_THRESHOLD
             for x in range(dw - 1):
@@ -308,15 +343,46 @@ class VisualPerceptionService:
         scale_x = (float(overlay_w) / sw) if (overlay_w > 0 and sw > 0) else 1.0
         scale_y = (float(overlay_h) / sh) if (overlay_h > 0 and sh > 0) else 1.0
 
-        # 优先 Foreground Window，剪裁到当前屏幕
+        # 优先选取有效的工作应用窗口 (排除自身控制台黑框与桌面任务栏)
+        def is_valid_work_window(h):
+            if not h or not user32.IsWindow(h) or not user32.IsWindowVisible(h) or user32.IsIconic(h):
+                return False
+            if h == self.godot_hwnd:
+                return False
+            buf = ctypes.create_unicode_buffer(256)
+            user32.GetClassNameW(h, buf, 256)
+            cname = buf.value
+            if cname in ("Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "ConsoleWindowClass"):
+                return False
+            title = ctypes.create_unicode_buffer(256)
+            user32.GetWindowTextW(h, title, 256)
+            tstr = title.value
+            if "Godot Engine (Console)" in tstr or "DesktopCat" in tstr:
+                return False
+            r = wintypes.RECT()
+            user32.GetWindowRect(h, ctypes.byref(r))
+            il = max(r.left, sx); it = max(r.top, sy)
+            ir = min(r.right, sx + sw); ib = min(r.bottom, sy + sh)
+            return (ir - il) >= 160 and (ib - it) >= 120
+
         fg_hwnd = user32.GetForegroundWindow()
+        target_h = fg_hwnd if is_valid_work_window(fg_hwnd) else None
+        if not target_h:
+            def find_top_cb(h, _):
+                nonlocal target_h
+                if is_valid_work_window(h):
+                    target_h = h
+                    return 0
+                return 1
+            user32.EnumWindows(WINFUNCTYPE(c_int, c_void_p, c_void_p)(find_top_cb), 0)
+
         cap_x, cap_y, cap_w, cap_h = sx, sy, sw, sh
-        if fg_hwnd and user32.IsWindowVisible(fg_hwnd) and not user32.IsIconic(fg_hwnd) and fg_hwnd != self.godot_hwnd:
+        if target_h:
             rect = wintypes.RECT()
-            user32.GetWindowRect(fg_hwnd, byref(rect))
+            user32.GetWindowRect(target_h, byref(rect))
             il = max(rect.left, sx); it = max(rect.top, sy)
             ir = min(rect.right, sx + sw); ib = min(rect.bottom, sy + sh)
-            if (ir - il) >= 120 and (ib - it) >= 100:
+            if (ir - il) >= 160 and (ib - it) >= 120:
                 cap_x, cap_y, cap_w, cap_h = il, it, ir - il, ib - it
 
         # 降采样目标尺寸

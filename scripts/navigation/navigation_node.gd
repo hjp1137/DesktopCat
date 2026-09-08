@@ -63,8 +63,11 @@ func _init(p_surface: RefCounted = null, p_margin: float = 14.0) -> void:
 			safe_x2 = x2
 			navigable = true
 		else:
-			safe_x1 = x1 + p_margin
-			safe_x2 = x2 - p_margin
+			var m := p_margin
+			if (source_type == "VISUAL" or source_type == "UIA") and length < (2.0 * p_margin + 4.0):
+				m = maxf(1.0, (length - 4.0) * 0.5)
+			safe_x1 = x1 + m
+			safe_x2 = x2 - m
 			navigable = (safe_x2 - safe_x1) >= 4.0
 
 func get_center() -> Vector2:

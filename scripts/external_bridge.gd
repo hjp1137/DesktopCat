@@ -49,6 +49,7 @@ var visual_world_model: Node = null
 var surface_fusion_builder: Node = null
 var platform_navigation_graph: RefCounted = null
 var autonomous_jump_planner: Node = null
+var cat_physics_world_model: Node2D = null
 
 func _ready() -> void:
 
@@ -131,6 +132,7 @@ func _cleanup_client(reason: String = "") -> void:
 
 
 func _process_client_buffer(c: Dictionary) -> void:
+	client = c.peer
 	var buf: PackedByteArray = c.buffer
 	while true:
 		var newline_idx := buf.find(10)
@@ -182,7 +184,19 @@ func _handle_raw_message(msg_str: String) -> void:
 		"ui_snapshot": _handle_ui_snapshot(data)
 		"visual_snapshot": _handle_visual_snapshot(data)
 		"surface_snapshot": _send_error("NOT_IMPLEMENTED", "Surface snapshots are reserved for future versions")
+		"t25_perception_snapshot": _handle_t25_perception_snapshot(data)
 		_: _send_error("UNKNOWN_TYPE", "Unknown message type: " + mtype)
+
+func _handle_t25_perception_snapshot(data: Dictionary) -> void:
+	if is_instance_valid(main_node) and data.has("work_area"):
+		var info := _get_overlay_info()
+		var area: Dictionary = data.work_area
+		if int(area.get("screen", -1)) != info.screen_index or int(area.get("x", 0)) != info.screen_pos.x or int(area.get("y", 0)) != info.screen_pos.y or int(area.get("width", 0)) != info.width or int(area.get("height", 0)) != info.height:
+			return
+	if is_instance_valid(cat_physics_world_model) and cat_physics_world_model.has_method("apply_snapshot"):
+		var accepted: bool = cat_physics_world_model.apply_snapshot(data)
+		if accepted and is_instance_valid(surface_fusion_builder):
+			surface_fusion_builder.request_fusion()
 
 
 
@@ -241,8 +255,8 @@ func _handle_command_message(data: Dictionary) -> void:
 		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
 		return
 	if cmd_name == "TOGGLE_DEBUG_SURFACES":
-		if is_instance_valid(surface_world_model) and surface_world_model.has_method("toggle_debug_draw"):
-			surface_world_model.toggle_debug_draw()
+		if is_instance_valid(main_node):
+			main_node.toggle_debug_window()
 		_send_json({"v": PROTOCOL_VERSION, "type": "ok", "command": cmd_name})
 		return
 	if cmd_name == "TOGGLE_DEBUG_PHYSICS":
@@ -366,7 +380,16 @@ func _send_status() -> void:
 			c_mode = Cat.ControlMode.keys()[md]
 	var info := _get_overlay_info()
 	var rev: int = window_world_model.latest_revision if is_instance_valid(window_world_model) else 0
-	_send_json({"v": PROTOCOL_VERSION, "type": "status", "cat_state": c_state, "control_mode": c_mode, "latest_revision": rev, "screen": {"index": info.screen_index, "x": info.screen_pos.x, "y": info.screen_pos.y, "width": info.width, "height": info.height}, "overlay": {"width": info.width, "height": info.height}, "window_handle": info.window_handle, "bridge_connected": true})
+	var cat_pos_dict := {"x": cat.position.x, "y": cat.position.y} if is_instance_valid(cat) else {"x": -1000.0, "y": -1000.0}
+	var status := {"v": PROTOCOL_VERSION, "type": "status", "cat": cat_pos_dict, "cat_state": c_state, "control_mode": c_mode, "latest_revision": rev, "screen": {"index": info.screen_index, "x": info.screen_pos.x, "y": info.screen_pos.y, "width": info.width, "height": info.height}, "overlay": {"width": info.width, "height": info.height}, "window_handle": info.window_handle, "bridge_connected": true}
+	if is_instance_valid(cat) and cat.get("metrics") != null:
+		status["cat_metrics"] = {"cat_scale": cat.metrics.final_scale, "foot_width": cat.metrics.foot_width, "cat_width": cat.metrics.body_width, "cat_height": cat.metrics.body_height}
+	if is_instance_valid(cat_physics_world_model):
+		status["perception_mode"] = cat_physics_world_model.perception_mode
+	if is_instance_valid(main_node):
+		status["debug_window_visible"] = is_instance_valid(main_node.debug_window) and main_node.debug_window.visible
+		status["debug_window_handle"] = main_node.get_debug_window_handle()
+	_send_json(status)
 
 
 
@@ -378,9 +401,6 @@ func _send_json(dict: Dictionary) -> void:
 	var bytes := text.to_utf8_buffer()
 	if client and client.get_status() == StreamPeerTCP.STATUS_CONNECTED:
 		client.put_data(bytes)
-	for c in clients:
-		if c.peer and c.peer != client and c.peer.get_status() == StreamPeerTCP.STATUS_CONNECTED:
-			c.peer.put_data(bytes)
 
 
 func _get_overlay_info() -> Dictionary:
@@ -392,5 +412,3 @@ func _get_overlay_info() -> Dictionary:
 	if is_instance_valid(main_node) and main_node.has_method("get_overlay_info"):
 		return main_node.get_overlay_info()
 	return {"screen_index": s_idx, "screen_pos": s_pos, "width": w, "height": h, "window_handle": wh}
-
-

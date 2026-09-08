@@ -6,6 +6,10 @@ Uses Python Standard Library + ctypes only. No 3rd-party dependencies.
 import ctypes
 from ctypes import wintypes
 import time
+if __package__:
+    from . import desktop_dpi
+else:
+    import desktop_dpi
 
 user32 = ctypes.windll.user32
 dwmapi = ctypes.windll.dwmapi
@@ -79,7 +83,7 @@ class WindowScanner:
             if cname in ("Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd", "Windows.UI.Core.CoreWindow"):
                 return 1
             title = self.get_window_text(hwnd)
-            if "DesktopCat" in title or cname == "Godot_Engine":
+            if "DesktopCat" in title or cname in ("Godot_Engine", "ConsoleWindowClass") or "Godot Engine" in title:
                 return 1
 
             wl, wt, wr, wb = self.get_window_rect(hwnd)
@@ -119,7 +123,8 @@ import json
 import sys
 
 class WindowPerceptionService:
-    def __init__(self, host: str = "127.0.0.1", port: int = 47831):
+    def __init__(self, host: str = "127.0.0.1", port: int = 47831,
+                 snapshot_sink=None):
         self.host = host
         self.port = port
         self.sock = None
@@ -129,6 +134,8 @@ class WindowPerceptionService:
         self.screen_info = {"index": 0, "x": 0, "y": 0, "width": 1920, "height": 1080}
         self.overlay_info = {"width": 1920, "height": 1080}
         self.hotkey_states = {}
+        self.debug_hwnd = 0
+        self.snapshot_sink = snapshot_sink
 
     def connect(self) -> bool:
         try:
@@ -191,6 +198,7 @@ class WindowPerceptionService:
         st_raw = self._recv_line()
         if st_raw:
             st = json.loads(st_raw)
+            self.debug_hwnd = int(st.get("debug_window_handle") or "0", 16)
             scr = st.get("screen", {})
             if scr and scr.get("index") != self.screen_info.get("index"):
                 print(f"[Perception] Screen changed to {scr.get('index')}")
@@ -231,6 +239,8 @@ class WindowPerceptionService:
                         "screen": {"index": self.screen_info.get("index", 0), "width": ow, "height": oh},
                         "windows": windows
                     }
+                    if self.snapshot_sink:
+                        self.snapshot_sink("windows", windows, self.screen_info)
                     self._send_msg(pkt)
                     self._recv_line()
                     print(f"[Perception] Window snapshot revision {self.revision}: {len(windows)} windows")
@@ -246,8 +256,10 @@ class WindowPerceptionService:
                 time.sleep(2.0)
 
     def _check_global_hotkeys(self):
-        hotkeys_win = {0x77: "F8", 0xBD: "减号键(-)", 0x56: "V"}
-        hotkeys_surf = {0x78: "F9", 0xBB: "等号键(=)", 0x42: "B"}
+        foreground = user32.GetForegroundWindow()
+        local_debug_input = foreground in (self.scanner.godot_hwnd, self.debug_hwnd)
+        hotkeys_win = {0x77: "F8", 0xBD: "减号键(-)"}
+        hotkeys_surf = {0x76: "F7", 0x78: "F9", 0x56: "V", 0xBB: "等号键(=)", 0x42: "B"}
         for vk, name in hotkeys_win.items():
             is_down = bool(user32.GetAsyncKeyState(vk) & 0x8000)
             was_down = self.hotkey_states.get(vk, False)
@@ -260,6 +272,8 @@ class WindowPerceptionService:
             is_down = bool(user32.GetAsyncKeyState(vk) & 0x8000)
             was_down = self.hotkey_states.get(vk, False)
             self.hotkey_states[vk] = is_down
+            if vk in (0x76, 0x78, 0x56) and local_debug_input:
+                continue
             if is_down and not was_down:
                 print(f"[Perception] 检测到快捷键 [{name}]，切换【Surface 物理表面】调试线框...")
                 self._send_msg({"v": 1, "type": "command", "name": "TOGGLE_DEBUG_SURFACES"})
@@ -340,4 +354,3 @@ if __name__ == "__main__":
     service = WindowPerceptionService()
     try: service.run()
     except KeyboardInterrupt: print("\n[Perception] Stopped.")
-

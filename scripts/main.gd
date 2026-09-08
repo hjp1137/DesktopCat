@@ -12,6 +12,7 @@ const PlatformNavigationGraphClass = preload("res://scripts/navigation/platform_
 const AutonomousJumpPlannerClass = preload("res://scripts/navigation/autonomous_jump_planner.gd")
 const ScreenExplorationControllerClass = preload("res://scripts/exploration/screen_exploration_controller.gd")
 const SurfaceClass = preload("res://scripts/world/surface.gd")
+const CatPhysicsWorldModelClass = preload("res://scripts/world/cat_physics_world_model.gd")
 
 @onready var cat: Node2D = $Cat
 var command_manager: CommandManager = null
@@ -23,6 +24,7 @@ var surface_world_model: Node2D = null
 var ui_element_world_model: Node2D = null
 var visual_world_model: Node2D = null
 var surface_fusion_builder: Node2D = null
+var cat_physics_world_model: Node2D = null
 var platform_navigation_graph: RefCounted = null
 var autonomous_jump_planner: Node2D = null
 var screen_exploration_controller: Node2D = null
@@ -30,6 +32,8 @@ var current_target_screen: int = 0
 var perception_service_pid: int = -1
 var fallback_timer: float = 0.0
 var fallback_demo_spawned: bool = false
+var show_debug_lines: bool = false
+var debug_window: Window = null
 
 func _ready() -> void:
 
@@ -63,6 +67,7 @@ func _ready() -> void:
 		cat.set("surface_world_model", surface_world_model)
 		if cat.has_method("on_surface_world_updated"):
 			surface_world_model.surface_world_updated.connect(cat.on_surface_world_updated)
+		surface_world_model.surface_world_updated.connect(func(_r): if is_instance_valid(cat): update_mouse_passthrough(cat.position))
 	
 	ui_element_world_model = UIElementWorldModelClass.new()
 	add_child(ui_element_world_model)
@@ -70,10 +75,14 @@ func _ready() -> void:
 	visual_world_model = VisualWorldModelClass.new()
 	add_child(visual_world_model)
 
+	cat_physics_world_model = CatPhysicsWorldModelClass.new()
+	add_child(cat_physics_world_model)
+
 	surface_fusion_builder = SurfaceFusionBuilderClass.new()
 	surface_fusion_builder.window_world_model = window_world_model
 	surface_fusion_builder.ui_element_world_model = ui_element_world_model
 	surface_fusion_builder.visual_world_model = visual_world_model
+	surface_fusion_builder.cat_physics_world_model = cat_physics_world_model
 	surface_fusion_builder.surface_world_model = surface_world_model
 	surface_fusion_builder.cat = cat
 	add_child(surface_fusion_builder)
@@ -107,6 +116,7 @@ func _ready() -> void:
 	external_bridge.set("platform_navigation_graph", platform_navigation_graph)
 	external_bridge.set("autonomous_jump_planner", autonomous_jump_planner)
 	external_bridge.set("screen_exploration_controller", screen_exploration_controller)
+	external_bridge.set("cat_physics_world_model", cat_physics_world_model)
 
 	add_child(external_bridge)
 
@@ -128,6 +138,7 @@ func _setup_transparent_overlay() -> void:
 	get_tree().root.transparent_bg = true
 	get_tree().root.transparent = true
 	var window := get_window()
+	exclude_window_from_capture(window)
 	window.transparent = true
 	window.borderless = true
 	window.always_on_top = true
@@ -150,6 +161,10 @@ func _apply_screen_layout(screen_idx: int) -> void:
 		screen_pos = DisplayServer.screen_get_position(screen_idx); screen_size = DisplayServer.screen_get_size(screen_idx) - Vector2i(0, 1)
 	print("[Main] 切换/应用屏幕 ID: %d, 位置=%s, 尺寸=%s" % [screen_idx, screen_pos, screen_size])
 	window.position = screen_pos; window.size = screen_size
+	if cat_physics_world_model:
+		cat_physics_world_model.reset_snapshot()
+	if surface_fusion_builder:
+		surface_fusion_builder.surface_grace_map.clear()
 	if window_world_model and window_world_model.has_method("clear_windows"):
 		window_world_model.clear_windows()
 	if surface_world_model and surface_world_model.has_method("clear_surfaces"):
@@ -172,15 +187,44 @@ func _apply_screen_layout(screen_idx: int) -> void:
 		screen_exploration_controller.last_candidates.clear()
 	
 
+func exclude_window_from_capture(window: Window) -> void:
+	window.exclude_from_capture = true
+
+func toggle_debug_window() -> void:
+	if not is_instance_valid(debug_window):
+		debug_window = preload("res://scripts/perception_debug_window.gd").new()
+		debug_window.main_node = self
+		debug_window.visible = false
+		add_child(debug_window)
+		debug_window.visibility_changed.connect(func(): show_debug_lines = debug_window.visible)
+	debug_window.visible = not debug_window.visible
+
+func get_debug_window_handle() -> String:
+	if not is_instance_valid(debug_window) or not debug_window.visible or DisplayServer.get_name() == "headless": return ""
+	return "0x%X" % DisplayServer.window_get_native_handle(DisplayServer.WINDOW_HANDLE, debug_window.get_window_id())
+
 func update_mouse_passthrough(cat_pos: Vector2) -> void:
-	if DisplayServer.get_name() == "headless" or (mouse_controller and mouse_controller.get("is_dragging")): return
+	if DisplayServer.get_name() == "headless": return
+	if mouse_controller and mouse_controller.get("is_dragging"):
+		# 拖拽小猫时临时解禁全屏捕获，避免甩动丢帧
+		DisplayServer.window_set_mouse_passthrough(PackedVector2Array())
+		return
+	var poly := _build_stitched_passthrough_polygon(cat_pos)
+	DisplayServer.window_set_mouse_passthrough(poly)
+
+func _build_stitched_passthrough_polygon(cat_pos: Vector2) -> PackedVector2Array:
+	var cat_poly: PackedVector2Array
 	if is_instance_valid(cat) and cat.get("metrics") != null:
-		DisplayServer.window_set_mouse_passthrough(cat.metrics.get_mouse_passthrough_polygon(cat_pos))
+		cat_poly = cat.metrics.get_mouse_passthrough_polygon(cat_pos)
 	else:
-		var half_w := 32.0; var top_h := 36.0; var bottom_h := 28.0
-		var p1 := cat_pos + Vector2(-half_w, -top_h); var p2 := cat_pos + Vector2(half_w, -top_h)
-		var p3 := cat_pos + Vector2(half_w, bottom_h); var p4 := cat_pos + Vector2(-half_w, bottom_h)
-		DisplayServer.window_set_mouse_passthrough(PackedVector2Array([p1, p2, p3, p4]))
+		var half_w := 36.0; var top_h := 36.0; var bottom_h := 28.0
+		cat_poly = PackedVector2Array([
+			cat_pos + Vector2(-half_w, -top_h),
+			cat_pos + Vector2(half_w, -top_h),
+			cat_pos + Vector2(half_w, bottom_h),
+			cat_pos + Vector2(-half_w, bottom_h)
+		])
+	return cat_poly
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -192,6 +236,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		_handle_key_event(event)
 
 func _handle_key_event(event: InputEventKey) -> bool:
+	if event.ctrl_pressed and event.alt_pressed:
+		if event.keycode >= KEY_1 and event.keycode <= KEY_7:
+			if cat_physics_world_model and cat_physics_world_model.has_method("set_debug_layer_mode"):
+				cat_physics_world_model.set_debug_layer_mode(int(event.keycode - KEY_0))
+			return true
+		if event.keycode == KEY_8:
+			if cat_physics_world_model and cat_physics_world_model.has_method("cycle_perception_mode"):
+				cat_physics_world_model.cycle_perception_mode()
+				if surface_fusion_builder:
+					surface_fusion_builder.request_fusion()
+			return true
 	match event.keycode:
 		KEY_ESCAPE: print("[Main] 接收到 ESC 键，安全退出。"); get_tree().quit(); return true
 		KEY_TAB:
@@ -204,13 +259,21 @@ func _handle_key_event(event: InputEventKey) -> bool:
 					cat.release_edge()
 			_apply_screen_layout((current_target_screen + 1) % DisplayServer.get_screen_count())
 			return true
+		KEY_F7:
+			toggle_debug_window()
+			return true
+		KEY_F6:
+			if cat_physics_world_model and cat_physics_world_model.has_method("cycle_perception_mode"):
+				cat_physics_world_model.cycle_perception_mode()
+				if surface_fusion_builder:
+					surface_fusion_builder.request_fusion()
+			return true
 		KEY_F8, KEY_MINUS, KEY_EQUAL, KEY_QUOTELEFT, KEY_W:
 			if window_world_model and window_world_model.has_method("toggle_debug_draw"):
 				window_world_model.toggle_debug_draw()
 			return true
 		KEY_F9, KEY_B, KEY_V:
-			if surface_world_model and surface_world_model.has_method("toggle_debug_draw"):
-				surface_world_model.toggle_debug_draw()
+			toggle_debug_window()
 			return true
 		KEY_F10, KEY_N, KEY_M:
 			if is_instance_valid(cat) and cat.has_method("toggle_physics_debug"):
@@ -301,10 +364,6 @@ func _handle_key_event(event: InputEventKey) -> bool:
 			if is_instance_valid(cat) and cat.anim_controller and cat.anim_controller.has_method("toggle_debug"):
 				cat.anim_controller.toggle_debug()
 			return true
-		KEY_7:
-			if is_instance_valid(cat) and cat.anim_controller and cat.anim_controller.has_method("toggle_showcase"):
-				cat.anim_controller.toggle_showcase()
-			return true
 		KEY_BRACKETLEFT:
 			if is_instance_valid(cat) and cat.has_method("adjust_user_scale"):
 				cat.adjust_user_scale(-0.1)
@@ -356,6 +415,12 @@ func get_overlay_info() -> Dictionary:
 	var pos: Vector2i = window.position if window else Vector2i.ZERO
 	var wh: String = ""
 	if DisplayServer.get_name() != "headless":
+		# Perception samples the selected work area, not a transient native window size.
+		var work_area := DisplayServer.screen_get_usable_rect(current_target_screen)
+		pos = work_area.position
+		sz = work_area.size
+		# Godot normalizes the virtual desktop origin; Win32 keeps the primary at (0, 0).
+		pos -= DisplayServer.screen_get_position(DisplayServer.get_primary_screen())
 		var handle = DisplayServer.window_get_native_handle(DisplayServer.WINDOW_HANDLE)
 		wh = "0x%X" % handle
 	return {
@@ -367,7 +432,7 @@ func get_overlay_info() -> Dictionary:
 	}
 
 func _process(delta: float) -> void:
-	if not fallback_demo_spawned and DisplayServer.get_name() != "headless":
+	if "--demo-surfaces" in OS.get_cmdline_user_args() and not fallback_demo_spawned and DisplayServer.get_name() != "headless":
 		fallback_timer += delta
 		if fallback_timer >= 3.0:
 			fallback_demo_spawned = true
@@ -383,8 +448,8 @@ func _try_start_perception_service() -> void:
 	
 	var base_dir: String = OS.get_executable_path().get_base_dir()
 	var script_candidates = [
-		base_dir.path_join("../tools/perception/perception_service.py"),
 		base_dir.path_join("tools/perception/perception_service.py"),
+		base_dir.path_join("../tools/perception/perception_service.py"),
 		ProjectSettings.globalize_path("res://tools/perception/perception_service.py")
 	]
 	var target_script: String = ""
